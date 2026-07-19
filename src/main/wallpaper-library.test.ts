@@ -71,6 +71,24 @@ describe('WallpaperLibrary', () => {
     );
   });
 
+  it('prunes staging directories left by interrupted imports', async () => {
+    const { library, root, generation } = await createLibrary();
+    const staleStaging = path.join(
+      root,
+      'library',
+      'items',
+      '.import-interrupted',
+    );
+    await mkdir(staleStaging, { recursive: true });
+    await writeFile(path.join(staleStaging, 'wallpaper.png'), fakePngBytes);
+
+    const preview = await library.importGeneration(generation);
+
+    await expect(readdir(path.join(root, 'library', 'items'))).resolves.toEqual([
+      preview.record.id,
+    ]);
+  });
+
   it('rejects record identifiers that could escape the library', async () => {
     const { library } = await createLibrary();
 

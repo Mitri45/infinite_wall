@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
+import path from 'node:path';
 
 const DEFAULT_OUTPUT_LIMIT = 1024 * 1024;
 const FORCE_KILL_DELAY_MS = 1_000;
@@ -48,6 +49,8 @@ export interface CapturedProcessOptions {
 
 export function createSanitizedEnvironment(
   source: NodeJS.ProcessEnv = process.env,
+  command?: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
     FORCE_COLOR: '0',
@@ -61,7 +64,22 @@ export function createSanitizedEnvironment(
     }
   }
 
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  if (command && pathApi.isAbsolute(command)) {
+    const commandDirectory = pathApi.dirname(command);
+    environment.PATH = [commandDirectory, environment.PATH]
+      .filter((value): value is string => Boolean(value))
+      .join(pathApi.delimiter);
+  }
+
   return environment;
+}
+
+export function requiresShell(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'win32' && /\.(?:bat|cmd)$/i.test(command);
 }
 
 export function runCapturedProcess(
@@ -94,10 +112,14 @@ export function runCapturedProcess(
     const stdoutDecoder = new StringDecoder('utf8');
     let stdoutLineBuffer = '';
 
+    const environment = createSanitizedEnvironment(process.env, options.command);
+    const shell = requiresShell(options.command)
+      ? environment.COMSPEC ?? true
+      : false;
     const child = spawn(options.command, [...options.args], {
       cwd: options.cwd,
-      env: createSanitizedEnvironment(),
-      shell: false,
+      env: environment,
+      shell,
       stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });

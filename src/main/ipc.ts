@@ -17,6 +17,7 @@ import {
   GenerationJobRunner,
 } from './generation-job-runner';
 import { GenerationService } from './generation-service';
+import { GenerationSessionController } from './generation-session';
 import {
   WallpaperLibrary,
   WallpaperLibraryError,
@@ -27,7 +28,9 @@ interface RegisterIpcHandlersOptions {
   readonly libraryRoot: string;
 }
 
-export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
+export function registerIpcHandlers(
+  options: RegisterIpcHandlersOptions,
+): () => Promise<void> {
   const commandResolver = () => resolveCodexCommand();
   const diagnostics = new CodexDiagnosticsService({ commandResolver });
   const inspectImage = async (imagePath: string) => {
@@ -47,7 +50,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
     inspectImage,
   });
   const generationService = new GenerationService({ runner, library });
-  let activeGeneration: AbortController | null = null;
+  const generationSessions = new GenerationSessionController();
 
   registerMediaProtocol(library);
 
@@ -58,7 +61,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
   ipcMain.handle(
     IPC_CHANNELS.generateWallpaper,
     async (event, rawRequest): Promise<OperationResult<WallpaperPreview>> => {
-      if (activeGeneration) {
+      if (generationSessions.busy) {
         return {
           ok: false,
           error: {
@@ -81,9 +84,11 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
         };
       }
 
-      const controller = new AbortController();
-      activeGeneration = controller;
+      const controller = generationSessions.start();
       const sendProgress = (progress: GenerationProgress) => {
+        if (progress.phase === 'importing') {
+          generationSessions.lockCancellation(controller);
+        }
         if (!event.sender.isDestroyed()) {
           event.sender.send(IPC_CHANNELS.generationProgress, progress);
         }
@@ -121,20 +126,18 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
           },
         };
       } finally {
-        if (activeGeneration === controller) {
-          activeGeneration = null;
-        }
+        generationSessions.finish(controller);
       }
     },
   );
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, () => {
-    if (!activeGeneration) {
-      return false;
-    }
-
-    activeGeneration.abort();
-    return true;
+    return generationSessions.cancel();
   });
+
+  return async () => {
+    generationSessions.dispose();
+    await generationSessions.waitForIdle();
+  };
 }
 
 function registerMediaProtocol(library: WallpaperLibrary): void {

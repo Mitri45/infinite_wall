@@ -212,12 +212,15 @@ export function App() {
                     ? 'Install Codex to start generating'
                     : codexDiagnostics.issue === 'not-authenticated'
                       ? 'Sign in to Codex'
+                      : codexDiagnostics.issue === 'unsupported-version'
+                        ? 'Upgrade Codex to continue'
                       : 'Check the Codex installation'}
                 </h2>
                 <p>{codexDiagnostics.message}</p>
               </div>
               <div className="codex-onboarding-actions">
-                {codexDiagnostics.issue === 'not-installed' && (
+                {(codexDiagnostics.issue === 'not-installed' ||
+                  codexDiagnostics.issue === 'unsupported-version') && (
                   <a href={CODEX_SETUP_URL} target="_blank" rel="noreferrer">
                     Open setup guide
                   </a>
@@ -324,14 +327,18 @@ export function App() {
                 aria-label="Wallpaper generation progress"
               />
               <p className="progress-message" aria-live="polite">{progress.message}</p>
-              <button
-                className="cancel-action"
-                type="button"
-                disabled={cancelling}
-                onClick={() => void handleCancel()}
-              >
-                {cancelling ? 'Cancelling…' : 'Cancel generation'}
-              </button>
+              {progress.phase !== 'importing' && progress.phase !== 'complete' ? (
+                <button
+                  className="cancel-action"
+                  type="button"
+                  disabled={cancelling}
+                  onClick={() => void handleCancel()}
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel generation'}
+                </button>
+              ) : (
+                <p className="persistence-note">Finishing the private library save…</p>
+              )}
             </section>
           ) : (
             <>

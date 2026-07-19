@@ -57,3 +57,16 @@ owner. Codex authored the initial project scaffold and verification setup.
   path confinement without consuming generation credits.
 - Re-ran lint, strict TypeScript checks, 50 automated tests, dependency audit,
   and Linux production packaging.
+
+## 2026-07-19 — Review-driven lifecycle hardening
+
+- Made Codex discovery work with nvm-managed launchers outside the desktop
+  session `PATH` and Windows npm command shims.
+- Added diagnostics capability probing for every `codex exec` option required
+  by the isolated generation runner.
+- Disabled cancellation once atomic library persistence begins and added
+  shutdown coordination that aborts active Codex work and awaits cleanup.
+- Pruned interrupted library staging directories and made transient job-root
+  initialization failures retryable without restarting the app.
+- Expanded platform, diagnostics, lifecycle, renderer, and filesystem
+  regression coverage without invoking live generation.

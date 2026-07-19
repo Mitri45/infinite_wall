@@ -2,6 +2,16 @@ import type { CodexDiagnostics } from '../shared/contracts';
 import { resolveCodexCommand } from './codex-command';
 import { runCapturedProcess } from './codex-process';
 
+const REQUIRED_EXEC_OPTIONS = [
+  '--ephemeral',
+  '--ignore-user-config',
+  '--json',
+  '--output-last-message',
+  '--output-schema',
+  '--sandbox',
+  '--skip-git-repo-check',
+] as const;
+
 interface CodexDiagnosticsOptions {
   readonly command?: string;
   readonly commandArgsPrefix?: readonly string[];
@@ -78,11 +88,34 @@ export class CodexDiagnosticsService {
       };
     }
 
+    const authMethod = parseAuthMethod(loginOutput);
+    const execHelpResult = await runCapturedProcess({
+      command,
+      args: [...this.#commandArgsPrefix, 'exec', '--help'],
+      timeoutMs: this.#timeoutMs,
+    });
+    const execHelp = `${execHelpResult.stdout}\n${execHelpResult.stderr}`;
+    if (
+      execHelpResult.spawnError ||
+      execHelpResult.timedOut ||
+      execHelpResult.exitCode !== 0 ||
+      REQUIRED_EXEC_OPTIONS.some((option) => !execHelp.includes(option))
+    ) {
+      return {
+        installed: true,
+        authenticated: false,
+        version,
+        authMethod,
+        issue: 'unsupported-version',
+        message: 'Upgrade the Codex CLI before generating a wallpaper.',
+      };
+    }
+
     return {
       installed: true,
       authenticated: true,
       version,
-      authMethod: parseAuthMethod(loginOutput),
+      authMethod,
       issue: null,
       message: 'Codex is installed and ready.',
     };

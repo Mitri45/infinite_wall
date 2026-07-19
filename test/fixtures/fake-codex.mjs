@@ -22,6 +22,19 @@ if (args[0] === '--version') {
   } else {
     process.stdout.write('Logged in using ChatGPT\n');
   }
+} else if (args[0] === 'exec' && args[1] === '--help') {
+  const supportedOptions = [
+    '--ephemeral',
+    '--ignore-user-config',
+    '--json',
+    '--output-last-message',
+    '--sandbox',
+    '--skip-git-repo-check',
+  ];
+  if (scenario !== 'diagnostics-unsupported') {
+    supportedOptions.push('--output-schema');
+  }
+  process.stdout.write(`${supportedOptions.join('\n')}\n`);
 } else if (args[0] === 'exec') {
   await runGenerationScenario(scenario, args);
 } else {

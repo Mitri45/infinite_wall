@@ -126,6 +126,26 @@ describe('GenerationJobRunner', () => {
     expect(await readdir(root)).not.toContain('job-stale');
   });
 
+  it('retries job-root initialization after a transient failure', async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-retry-'));
+    temporaryRoots.push(parent);
+    const jobRoot = path.join(parent, 'jobs');
+    await writeFile(jobRoot, 'temporarily unavailable');
+    const runner = new GenerationJobRunner({
+      jobRoot,
+      inspectImage: async () => ({ width: 1920, height: 1080 }),
+      command: process.execPath,
+      commandArgsPrefix: [fakeCodexPath, 'success'],
+      timeoutMs: 2_000,
+    });
+
+    await expect(runner.run(request)).rejects.toThrow();
+    await rm(jobRoot);
+    await expect(runner.run(request)).resolves.toMatchObject({
+      title: 'Quiet Geometry',
+    });
+  });
+
   it('supports explicit cancellation without leaving a successful job', async () => {
     const { runner } = await createRunner('timeout', 5_000);
     const controller = new AbortController();

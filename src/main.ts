@@ -7,6 +7,10 @@ import { CODEX_SETUP_URL } from './shared/app-info';
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
+let disposeIpcHandlers: (() => Promise<void>) | null = null;
+let shutdownStarted = false;
+let shutdownReady = false;
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'infinite-wall-media',
@@ -75,7 +79,7 @@ const createWindow = (): void => {
 
 app.whenReady().then(() => {
   registerContentSecurityPolicy();
-  registerIpcHandlers({
+  disposeIpcHandlers = registerIpcHandlers({
     jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
     libraryRoot: path.join(app.getPath('userData'), 'library'),
   });
@@ -86,6 +90,24 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', (event) => {
+  if (shutdownReady) {
+    return;
+  }
+  event.preventDefault();
+  if (shutdownStarted) {
+    return;
+  }
+  shutdownStarted = true;
+  void (disposeIpcHandlers?.() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => {
+      disposeIpcHandlers = null;
+      shutdownReady = true;
+      app.quit();
+    });
 });
 
 app.on('window-all-closed', () => {

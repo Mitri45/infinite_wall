@@ -988,6 +988,12 @@ h2 {
   opacity: 0.5;
 }
 
+.persistence-note {
+  margin: 0;
+  color: #858a86;
+  font-size: 0.64rem;
+}
+
 .generation-error {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

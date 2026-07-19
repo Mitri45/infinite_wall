@@ -175,6 +175,45 @@ describe('theme selection experience', () => {
     ).toBeTruthy();
   });
 
+  it('stops offering cancellation once the library import begins', async () => {
+    const progressListener: {
+      current: Parameters<InfiniteWallApi['onGenerationProgress']>[0] | null;
+    } = { current: null };
+    let resolveGeneration: (
+      result: Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>,
+    ) => void = () => undefined;
+    installBridge(readyDiagnostics, {
+      generateWallpaper: () =>
+        new Promise<Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>>(
+          (resolve) => {
+            resolveGeneration = resolve;
+          },
+        ),
+      onGenerationProgress: (listener) => {
+        progressListener.current = listener;
+        return () => undefined;
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Generate wallpaper/ }));
+    act(() => {
+      progressListener.current?.({
+        phase: 'importing',
+        message: 'Saving the wallpaper to your private library…',
+        percent: 94,
+      });
+    });
+
+    expect(screen.queryByRole('button', { name: 'Cancel generation' })).toBeNull();
+    expect(screen.getByText('Finishing the private library save…')).toBeTruthy();
+    resolveGeneration({ ok: true, value: preview });
+    expect(
+      await screen.findByRole('img', { name: 'Quiet Geometry wallpaper preview' }),
+    ).toBeTruthy();
+  });
+
   it('shows official installation help when Codex is missing', async () => {
     installBridge({
       installed: false,
@@ -211,5 +250,23 @@ describe('theme selection experience', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sign in to Codex' })).toBeTruthy();
     expect(screen.getByText('codex login')).toBeTruthy();
+  });
+
+  it('shows upgrade guidance when Codex lacks required exec capabilities', async () => {
+    installBridge({
+      installed: true,
+      authenticated: false,
+      version: '0.1.0',
+      authMethod: 'chatgpt',
+      issue: 'unsupported-version',
+      message: 'Upgrade the Codex CLI before generating a wallpaper.',
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Upgrade Codex to continue' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open setup guide' })).toBeTruthy();
   });
 });

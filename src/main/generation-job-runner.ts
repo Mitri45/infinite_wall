@@ -244,7 +244,19 @@ export class GenerationJobRunner {
   }
 
   async #prepareJobRoot(): Promise<void> {
-    this.#jobRootPreparation ??= this.#initializeJobRoot();
+    if (!this.#jobRootPreparation) {
+      const preparation = this.#initializeJobRoot();
+      this.#jobRootPreparation = preparation;
+      try {
+        await preparation;
+      } catch (error) {
+        if (this.#jobRootPreparation === preparation) {
+          this.#jobRootPreparation = null;
+        }
+        throw error;
+      }
+      return;
+    }
     await this.#jobRootPreparation;
   }
 

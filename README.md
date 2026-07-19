@@ -16,7 +16,8 @@ for macOS and Windows.
 - Node.js 22 or newer
 - pnpm 11.13.0
 - Git
-- [Codex CLI](https://developers.openai.com/codex/cli/), installed and signed in
+- [Codex CLI](https://developers.openai.com/codex/cli/), installed, signed in,
+  and current enough to support Infinite Wall's required `codex exec` options
 
 Infinite Wall searches the desktop session `PATH` and common platform-specific
 install locations, including npm installations managed by nvm. If Codex lives
@@ -54,18 +55,22 @@ session, pinned model, `workspace-write` sandbox, strict output schema, capped
 process output, and a private per-job directory under Electron's local
 `userData` directory. It accepts only one schema-valid, decodable image confined
 to that directory, verifies that its file signature and aspect ratio match the
-request, and
-maps Codex JSONL event types to sanitized progress phases without forwarding raw
+request, and maps Codex JSONL event types to sanitized progress phases without
+forwarding raw
 model or process output. Prompts are delivered over stdin instead of process
 arguments. Child processes receive an allowlisted environment rather than the
 renderer or the app's complete environment, and stale private job directories
-from interrupted sessions are pruned before the first new job.
+from interrupted sessions are pruned before the first new job. Diagnostics probe
+the required non-interactive capabilities before marking Codex ready, and a
+discovered executable's directory is added to the child `PATH` so nvm-managed
+launchers can find their adjacent Node runtime.
 
 Successful jobs are copied into a private staging directory with validated
 metadata and atomically renamed into the local library. Temporary Codex job
-files are then removed. The renderer previews imported images through a
-record-ID-only custom protocol; absolute local paths are never exposed through
-the preload API.
+files are then removed, and staging directories left by interrupted application
+sessions are pruned before the next import. The renderer previews imported
+images through a record-ID-only custom protocol; absolute local paths are never
+exposed through the preload API.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

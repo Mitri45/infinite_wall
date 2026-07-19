@@ -44,6 +44,7 @@ export class WallpaperLibrary {
   readonly #root: string;
   readonly #itemsRoot: string;
   readonly #inspectImage: WallpaperLibraryOptions['inspectImage'];
+  #itemsRootPreparation: Promise<void> | null = null;
 
   constructor(options: WallpaperLibraryOptions) {
     this.#root = path.resolve(options.root);
@@ -52,10 +53,7 @@ export class WallpaperLibrary {
   }
 
   async importGeneration(result: GenerationResult): Promise<WallpaperPreview> {
-    await mkdir(this.#itemsRoot, { recursive: true, mode: 0o700 });
-    await chmod(this.#root, 0o700);
-    await chmod(this.#itemsRoot, 0o700);
-    await this.#assertItemsRootConfined();
+    await this.#prepareItemsRoot();
 
     const sourceStats = await stat(result.imagePath).catch(() => null);
     const extension = path.extname(result.imagePath).toLowerCase();
@@ -130,6 +128,38 @@ export class WallpaperLibrary {
       }
       throw new WallpaperLibraryError('Infinite Wall could not import the wallpaper.');
     }
+  }
+
+  async #prepareItemsRoot(): Promise<void> {
+    if (!this.#itemsRootPreparation) {
+      const preparation = this.#initializeItemsRoot();
+      this.#itemsRootPreparation = preparation;
+      try {
+        await preparation;
+      } catch (error) {
+        if (this.#itemsRootPreparation === preparation) {
+          this.#itemsRootPreparation = null;
+        }
+        throw error;
+      }
+      return;
+    }
+    await this.#itemsRootPreparation;
+  }
+
+  async #initializeItemsRoot(): Promise<void> {
+    await mkdir(this.#itemsRoot, { recursive: true, mode: 0o700 });
+    await chmod(this.#root, 0o700);
+    await chmod(this.#itemsRoot, 0o700);
+    await this.#assertItemsRootConfined();
+    const entries = await readdir(this.#itemsRoot, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('.import-'))
+        .map((entry) =>
+          rm(path.join(this.#itemsRoot, entry.name), { recursive: true, force: true }),
+        ),
+    );
   }
 
   async resolveImage(recordId: string): Promise<string | null> {

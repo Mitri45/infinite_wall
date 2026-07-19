@@ -50,6 +50,19 @@ describe('CodexDiagnosticsService', () => {
       message: 'Install the Codex CLI to generate wallpapers.',
     });
   });
+
+  it('requires the Codex exec capabilities used by generation', async () => {
+    const service = createFakeService('diagnostics-unsupported');
+
+    await expect(service.check()).resolves.toEqual({
+      installed: true,
+      authenticated: false,
+      version: '9.8.7',
+      authMethod: 'chatgpt',
+      issue: 'unsupported-version',
+      message: 'Upgrade the Codex CLI before generating a wallpaper.',
+    });
+  });
 });
 
 function createFakeService(scenario: string): CodexDiagnosticsService {

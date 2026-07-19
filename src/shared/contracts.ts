@@ -130,7 +130,12 @@ export const codexDiagnosticsSchema = z
       .enum(['chatgpt', 'api-key', 'access-token', 'unknown'])
       .nullable(),
     issue: z
-      .enum(['not-installed', 'not-authenticated', 'check-failed'])
+      .enum([
+        'not-installed',
+        'not-authenticated',
+        'unsupported-version',
+        'check-failed',
+      ])
       .nullable(),
     message: z.string().min(1).max(240),
   })
