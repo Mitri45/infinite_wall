@@ -81,7 +81,7 @@ owner. Codex authored the initial project scaffold and verification setup.
   confined rejection/removal, and protection for the currently applied image.
 - Added preview apply/reject actions and a responsive local history with
   preview, apply, favorite, and removal controls.
-- Expanded adapter, filesystem, and renderer coverage to 83 tests without live
+- Expanded adapter, filesystem, and renderer coverage to 84 tests without live
   Codex calls or wallpaper changes.
 - Kept D-Bus, X11, Wayland, and runtime-directory capabilities scoped only to
   Linux wallpaper commands rather than the Codex generation environment.
@@ -89,3 +89,5 @@ owner. Codex authored the initial project scaffold and verification setup.
   metadata persistence, and made shutdown wait for that queue to drain.
 - Hardened Windows failure propagation and allowed older GNOME installations
   without the optional dark-wallpaper setting.
+- Derived history preview labels from persisted record provenance rather than
+  the currently selected generation direction.

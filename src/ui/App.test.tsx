@@ -209,6 +209,26 @@ describe('theme selection experience', () => {
     expect(document.body.textContent).not.toContain(preview.record.filename);
   });
 
+  it('derives history preview provenance from the stored record', async () => {
+    const natureItem: WallpaperLibraryItem = {
+      record: { ...preview.record, themeId: 'nature' },
+      previewUrl: preview.previewUrl,
+    };
+    installBridge(readyDiagnostics, {
+      listWallpapers: async () => ({ ok: true, value: [natureItem] }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Preview Quiet Geometry' }),
+    );
+
+    expect(screen.getByText('Library wallpaper')).toBeTruthy();
+    expect(screen.getAllByText('1920 × 1080 · Nature')).toHaveLength(2);
+    expect(screen.queryByText('1920 × 1080 · Infinite · Minimal')).toBeNull();
+  });
+
   it('streams sanitized progress and cancels an active generation', async () => {
     const progressListener: {
       current: Parameters<InfiniteWallApi['onGenerationProgress']>[0] | null;

@@ -21,6 +21,10 @@ const INITIAL_PROGRESS: GenerationProgress = {
   percent: 2,
 };
 
+type ActivePreview = WallpaperLibraryItem & {
+  readonly source: 'generated' | 'library';
+};
+
 export function App() {
   const platform = (window.infiniteWall?.platform as string | undefined) ?? 'preview';
   const [codexDiagnostics, setCodexDiagnostics] =
@@ -37,7 +41,7 @@ export function App() {
   const [generating, setGenerating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<GenerationProgress>(INITIAL_PROGRESS);
-  const [preview, setPreview] = useState<WallpaperLibraryItem | null>(null);
+  const [preview, setPreview] = useState<ActivePreview | null>(null);
   const [wallpapers, setWallpapers] = useState<WallpaperLibraryItem[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeWallpaperId, setActiveWallpaperId] = useState<string | null>(null);
@@ -156,7 +160,7 @@ export function App() {
         await buildRequest(),
       );
       if (result.ok) {
-        setPreview(result.value);
+        setPreview({ ...result.value, source: 'generated' });
         await refreshLibrary();
       } else {
         setGenerationError(result.error);
@@ -386,7 +390,11 @@ export function App() {
 
           <div className="direction-copy">
             <p className="collection-label">
-              {preview ? 'New wallpaper' : selectedTheme.collection}
+              {preview
+                ? preview.source === 'generated'
+                  ? 'New wallpaper'
+                  : 'Library wallpaper'
+                : selectedTheme.collection}
             </p>
             <div className="direction-title-row">
               <h2 id="direction-title">
@@ -405,7 +413,8 @@ export function App() {
             </p>
             {preview ? (
               <p className="preview-metadata">
-                {preview.record.width} × {preview.record.height} · {selectionLabel}
+                {preview.record.width} × {preview.record.height} ·{' '}
+                {getThemePack(preview.record.themeId).name}
               </p>
             ) : (
               <div className="mood-list" aria-label="Theme mood">
@@ -548,7 +557,7 @@ export function App() {
                     <button
                       className="history-preview"
                       type="button"
-                      onClick={() => setPreview(item)}
+                      onClick={() => setPreview({ ...item, source: 'library' })}
                       aria-label={`Preview ${item.record.title}`}
                     >
                       <img src={item.previewUrl} alt="" />
