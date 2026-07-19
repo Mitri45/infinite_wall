@@ -9,6 +9,8 @@ const SAFE_ENVIRONMENT_KEYS = [
   'APPDATA',
   'CODEX_HOME',
   'COMSPEC',
+  'DBUS_SESSION_BUS_ADDRESS',
+  'DISPLAY',
   'HOME',
   'LANG',
   'LC_ALL',
@@ -23,6 +25,8 @@ const SAFE_ENVIRONMENT_KEYS = [
   'WINDIR',
   'XDG_CACHE_HOME',
   'XDG_CONFIG_HOME',
+  'XDG_RUNTIME_DIR',
+  'WAYLAND_DISPLAY',
 ] as const;
 
 export interface CapturedProcessResult {

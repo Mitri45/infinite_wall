@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   CodexDiagnostics,
+  WallpaperLibraryItem,
   WallpaperPreview,
 } from '../shared/contracts';
 import type { InfiniteWallApi } from '../shared/ipc';
@@ -61,6 +62,24 @@ function installBridge(
         },
       }),
       cancelGeneration: async () => false,
+      listWallpapers: async () => ({ ok: true, value: [] }),
+      applyWallpaper: async () => ({
+        ok: false,
+        error: {
+          code: 'wallpaper-apply',
+          message: 'Not used in this test.',
+          retryable: false,
+        },
+      }),
+      deleteWallpaper: async () => ({ ok: true, value: false }),
+      setWallpaperFavorite: async () => ({
+        ok: false,
+        error: {
+          code: 'library-operation',
+          message: 'Not used in this test.',
+          retryable: false,
+        },
+      }),
       onGenerationProgress: () => () => undefined,
       ...overrides,
     },
@@ -115,6 +134,79 @@ describe('theme selection experience', () => {
         display: { width: 1920, height: 1080 },
       }),
     );
+  });
+
+  it('applies an imported preview and records it as the current wallpaper', async () => {
+    const applyWallpaper = vi.fn(async () => ({
+      ok: true as const,
+      value: { ...preview.record, applied: true },
+    }));
+    installBridge(readyDiagnostics, {
+      generateWallpaper: async () => ({ ok: true, value: preview }),
+      applyWallpaper,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Generate wallpaper/ }));
+    await user.click(await screen.findByRole('button', { name: 'Apply wallpaper' }));
+
+    expect(applyWallpaper).toHaveBeenCalledWith(preview.record.id);
+    expect(
+      (await screen.findByRole('button', { name: 'Applied to desktop' })).hasAttribute(
+        'disabled',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an imported preview and removes it from the local library', async () => {
+    const deleteWallpaper = vi.fn(async () => ({ ok: true as const, value: true }));
+    installBridge(readyDiagnostics, {
+      generateWallpaper: async () => ({ ok: true, value: preview }),
+      deleteWallpaper,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Generate wallpaper/ }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Reject and remove' }),
+    );
+
+    expect(deleteWallpaper).toHaveBeenCalledWith(preview.record.id);
+    expect(screen.queryByText('Reject and remove')).toBeNull();
+  });
+
+  it('loads local history and toggles favorites without exposing file paths', async () => {
+    const item: WallpaperLibraryItem = {
+      record: preview.record,
+      previewUrl: preview.previewUrl,
+    };
+    const setWallpaperFavorite = vi.fn(async () => ({
+      ok: true as const,
+      value: { ...preview.record, favorite: true },
+    }));
+    installBridge(readyDiagnostics, {
+      listWallpapers: async () => ({ ok: true, value: [item] }),
+      setWallpaperFavorite,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Quiet Geometry' })).toBeTruthy();
+    await user.click(
+      screen.getByRole('button', { name: 'Add Quiet Geometry to favorites' }),
+    );
+
+    expect(setWallpaperFavorite).toHaveBeenCalledWith(preview.record.id, true);
+    expect(
+      (
+        await screen.findByRole('button', {
+          name: 'Remove Quiet Geometry from favorites',
+        })
+      ).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(document.body.textContent).not.toContain(preview.record.filename);
   });
 
   it('streams sanitized progress and cancels an active generation', async () => {

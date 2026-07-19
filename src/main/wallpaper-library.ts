@@ -17,6 +17,7 @@ import path from 'node:path';
 import {
   identifierSchema,
   type GenerationResult,
+  type WallpaperLibraryItem,
   type WallpaperPreview,
   type WallpaperRecord,
   wallpaperRecordSchema,
@@ -45,6 +46,7 @@ export class WallpaperLibrary {
   readonly #itemsRoot: string;
   readonly #inspectImage: WallpaperLibraryOptions['inspectImage'];
   #itemsRootPreparation: Promise<void> | null = null;
+  #mutationTail: Promise<void> = Promise.resolve();
 
   constructor(options: WallpaperLibraryOptions) {
     this.#root = path.resolve(options.root);
@@ -163,6 +165,11 @@ export class WallpaperLibrary {
   }
 
   async resolveImage(recordId: string): Promise<string | null> {
+    try {
+      await this.#prepareItemsRoot();
+    } catch {
+      return null;
+    }
     const parsedId = identifierSchema.safeParse(recordId);
     if (!parsedId.success) {
       return null;
@@ -198,6 +205,17 @@ export class WallpaperLibrary {
   }
 
   async getRecentConcepts(limit = 20): Promise<string[]> {
+    const [resolvedRoot, resolvedItemsRoot] = await Promise.all([
+      realpath(this.#root).catch(() => null),
+      realpath(this.#itemsRoot).catch(() => null),
+    ]);
+    if (
+      !resolvedRoot ||
+      !resolvedItemsRoot ||
+      path.dirname(resolvedItemsRoot) !== resolvedRoot
+    ) {
+      return [];
+    }
     const entries = await readdir(this.#itemsRoot, { withFileTypes: true }).catch(
       () => [],
     );
@@ -213,6 +231,132 @@ export class WallpaperLibrary {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, Math.max(0, Math.min(limit, 20)))
       .map((record) => record.sceneSummary);
+  }
+
+  async list(): Promise<WallpaperLibraryItem[]> {
+    await this.#prepareItemsRoot();
+    const entries = await readdir(this.#itemsRoot, { withFileTypes: true });
+    const records = (
+      await Promise.all(
+        entries
+          .filter(
+            (entry) =>
+              entry.isDirectory() && identifierSchema.safeParse(entry.name).success,
+          )
+          .map(async (entry) => {
+            const record = await readRecord(path.join(this.#itemsRoot, entry.name));
+            if (
+              !record ||
+              record.id !== entry.name ||
+              !(await this.resolveImage(record.id))
+            ) {
+              return null;
+            }
+            return record;
+          }),
+      )
+    ).filter((record): record is WallpaperRecord => record !== null);
+
+    return records
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map((record) => ({ record, previewUrl: previewUrlFor(record.id) }));
+  }
+
+  async setFavorite(recordId: string, favorite: boolean): Promise<WallpaperRecord> {
+    return this.#runMutation(async () => {
+      const item = await this.#resolveItem(recordId);
+      if (!item) {
+        throw new WallpaperLibraryError('The wallpaper could not be found.');
+      }
+      const record = wallpaperRecordSchema.parse({ ...item.record, favorite });
+      await writeRecordAtomically(item.directory, record);
+      return record;
+    });
+  }
+
+  async markApplied(recordId: string): Promise<WallpaperRecord> {
+    return this.#runMutation(async () => {
+      const selected = await this.#resolveItem(recordId);
+      if (!selected) {
+        throw new WallpaperLibraryError('The wallpaper could not be found.');
+      }
+
+      const selectedRecord = wallpaperRecordSchema.parse({
+        ...selected.record,
+        applied: true,
+      });
+      await writeRecordAtomically(selected.directory, selectedRecord);
+
+      const entries = await readdir(this.#itemsRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (
+          entry.name === selectedRecord.id ||
+          !entry.isDirectory() ||
+          !identifierSchema.safeParse(entry.name).success
+        ) {
+          continue;
+        }
+        const item = await this.#resolveItem(entry.name);
+        if (item?.record.applied) {
+          await writeRecordAtomically(
+            item.directory,
+            wallpaperRecordSchema.parse({ ...item.record, applied: false }),
+          );
+        }
+      }
+      return selectedRecord;
+    });
+  }
+
+  async delete(recordId: string): Promise<boolean> {
+    return this.#runMutation(async () => {
+      const item = await this.#resolveItem(recordId);
+      if (!item) {
+        return false;
+      }
+      if (item.record.applied) {
+        throw new WallpaperLibraryError(
+          'Apply another wallpaper before removing the current one.',
+        );
+      }
+      await rm(item.directory, { recursive: true, force: false });
+      return true;
+    });
+  }
+
+  async #resolveItem(
+    recordId: string,
+  ): Promise<{ readonly directory: string; readonly record: WallpaperRecord } | null> {
+    await this.#prepareItemsRoot();
+    const parsedId = identifierSchema.safeParse(recordId);
+    if (!parsedId.success) {
+      return null;
+    }
+    const itemDirectory = path.join(this.#itemsRoot, parsedId.data);
+    const [resolvedItemsRoot, resolvedDirectory] = await Promise.all([
+      realpath(this.#itemsRoot).catch(() => null),
+      realpath(itemDirectory).catch(() => null),
+    ]);
+    if (
+      !resolvedItemsRoot ||
+      !resolvedDirectory ||
+      path.dirname(resolvedDirectory) !== resolvedItemsRoot
+    ) {
+      return null;
+    }
+    const record = await readRecord(resolvedDirectory);
+    return record?.id === parsedId.data
+      ? { directory: resolvedDirectory, record }
+      : null;
+  }
+
+  #runMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#mutationTail.then(operation, operation);
+    this.#mutationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   async #assertItemsRootConfined(): Promise<void> {
@@ -243,5 +387,25 @@ async function readRecord(itemDirectory: string): Promise<WallpaperRecord | null
     return wallpaperRecordSchema.parse(JSON.parse(text));
   } catch {
     return null;
+  }
+}
+
+async function writeRecordAtomically(
+  itemDirectory: string,
+  record: WallpaperRecord,
+): Promise<void> {
+  const temporaryPath = path.join(
+    itemDirectory,
+    `.record-${randomUUID()}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    await rename(temporaryPath, path.join(itemDirectory, METADATA_FILENAME));
+  } catch {
+    await rm(temporaryPath, { force: true });
+    throw new WallpaperLibraryError('The wallpaper library could not be updated.');
   }
 }

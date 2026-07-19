@@ -167,6 +167,7 @@ export const GENERATION_ERROR_CODES = [
   'cancelled',
   'invalid-request',
   'library-import',
+  'library-operation',
   'malformed-output',
   'missing-image',
   'moderation',
@@ -176,6 +177,7 @@ export const GENERATION_ERROR_CODES = [
   'outside-job-directory',
   'process-failed',
   'timeout',
+  'wallpaper-apply',
 ] as const;
 
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
@@ -219,6 +221,17 @@ export const wallpaperPreviewSchema = z
   .strict();
 
 export type WallpaperPreview = z.infer<typeof wallpaperPreviewSchema>;
+
+export const wallpaperLibraryItemSchema = z
+  .object({
+    record: wallpaperRecordSchema,
+    previewUrl: z
+      .string()
+      .regex(/^infinite-wall-media:\/\/wallpaper\/[a-z0-9-]+$/),
+  })
+  .strict();
+
+export type WallpaperLibraryItem = z.infer<typeof wallpaperLibraryItemSchema>;
 
 export const appSettingsSchema = z
   .object({
