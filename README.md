@@ -4,9 +4,11 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The repository is at foundation stage. The implementation target is a polished
-Linux release, with OS-specific wallpaper integrations kept modular for macOS
-and Windows.
+The first product slice is implemented: 12 validated theme packs, curated and
+weighted scene selection, recent-concept exclusion, custom directions, and a
+responsive theme library. Generation and persistence wiring are the next
+milestone. The release target is Linux, with OS integrations kept modular for
+macOS and Windows.
 
 ## Prerequisites
 
@@ -35,6 +37,10 @@ pnpm make
 The app uses Electron Forge, Vite, React, and TypeScript. The renderer is
 sandboxed, has no Node.js access, and talks to the main process only through a
 narrow typed preload API.
+
+Shared Zod contracts define theme packs, generation requests and results,
+wallpaper records, and application settings. Theme content is validated at
+module load, and each curated pack contains at least four original SFW scenes.
 
 The planned generation path runs the user's local Codex CLI. Generated images,
 prompts, settings, and history will stay under Electron's local `userData`

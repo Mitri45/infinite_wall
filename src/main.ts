@@ -1,8 +1,32 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import path from 'node:path';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
+
+const registerContentSecurityPolicy = (): void => {
+  const development = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  const policy = [
+    "default-src 'self'",
+    "script-src 'self'",
+    `style-src 'self'${development ? " 'unsafe-inline'" : ''}`,
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src 'self'${development ? ' http://localhost:* ws://localhost:*' : ''}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [policy],
+      },
+    });
+  });
+};
 
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
@@ -40,6 +64,7 @@ const createWindow = (): void => {
 };
 
 app.whenReady().then(() => {
+  registerContentSecurityPolicy();
   createWindow();
 
   app.on('activate', () => {
