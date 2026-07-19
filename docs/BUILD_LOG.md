@@ -121,3 +121,20 @@ owner. Codex authored the initial project scaffold and verification setup.
   scripts strict in both development and production with focused policy tests.
 - Restarted the app and confirmed the generated library record and applied
   state persisted.
+
+## 2026-07-19 — Review-driven tray lifecycle hardening
+
+- Added a single-instance lock so a second launch focuses the existing window
+  instead of starting another scheduler against the same private library.
+- Added an explicit renderer-ready handshake that queues tray generation
+  commands until React listeners are installed.
+- Refreshed renderer history after scheduled or tray-driven wallpaper changes
+  and ignored tray generation commands while another UI generation is active.
+- Preserved schedule deadlines across unrelated preference changes and returned
+  current settings instead of the startup snapshot.
+- Added Linux XDG autostart support while retaining native login items on macOS
+  and Windows.
+- Serialized complete settings operations through launch-at-login updates and
+  included the mutation tail in clean shutdown.
+- Expanded deterministic coverage to 101 tests and rebuilt the Linux production
+  package successfully.

@@ -36,6 +36,7 @@ const api: InfiniteWallApi = Object.freeze({
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   updateSettings: (patch: AppSettingsPatch) =>
     ipcRenderer.invoke(IPC_CHANNELS.updateSettings, appSettingsPatchSchema.parse(patch)),
+  signalRendererReady: () => ipcRenderer.send(IPC_CHANNELS.rendererReady),
   onAppCommand: (listener: (command: AppCommand) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, command: unknown) => {
       const parsed = appCommandSchema.safeParse(command);
@@ -57,6 +58,11 @@ const api: InfiniteWallApi = Object.freeze({
     };
     ipcRenderer.on(IPC_CHANNELS.generationProgress, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.generationProgress, handler);
+  },
+  onLibraryChanged: (listener: () => void) => {
+    const handler = () => listener();
+    ipcRenderer.on(IPC_CHANNELS.libraryChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, handler);
   },
 });
 

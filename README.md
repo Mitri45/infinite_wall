@@ -89,6 +89,8 @@ Settings are stored in a private atomic JSON file under Electron `userData`.
 The main process owns scheduling and tray commands. A failed scheduled run
 produces one local notification and waits for the next configured interval;
 it never performs an immediate or costly retry.
+Linux launch-at-login uses a private XDG autostart entry; macOS and Windows use
+Electron's native login-item integration.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

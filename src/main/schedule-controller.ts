@@ -25,8 +25,15 @@ export class ScheduleController {
   }
 
   configure(settings: AppSettings): void {
-    this.#revision += 1;
+    const scheduleChanged =
+      this.#settings === null ||
+      this.#settings.scheduleHours !== settings.scheduleHours ||
+      this.#settings.schedulePaused !== settings.schedulePaused;
     this.#settings = settings;
+    if (!scheduleChanged) {
+      return;
+    }
+    this.#revision += 1;
     this.#clearScheduledTimer();
     this.#scheduleNext();
   }

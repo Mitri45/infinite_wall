@@ -50,4 +50,19 @@ describe('ScheduleController', () => {
     await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
     expect(run).toHaveBeenCalledTimes(2);
   });
+
+  it('preserves the deadline for unrelated settings updates', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn(async () => undefined);
+    const scheduler = new ScheduleController({ run, onFailure: vi.fn() });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: 24 }));
+
+    await vi.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
+    scheduler.configure(
+      appSettingsSchema.parse({ scheduleHours: 24, quality: 'high' }),
+    );
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
 });

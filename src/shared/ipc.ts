@@ -25,6 +25,8 @@ export const IPC_CHANNELS = {
   getSettings: 'settings:get',
   updateSettings: 'settings:update',
   appCommand: 'app:command',
+  libraryChanged: 'library:changed',
+  rendererReady: 'renderer:ready',
 } as const;
 
 export interface InfiniteWallApi {
@@ -50,7 +52,9 @@ export interface InfiniteWallApi {
   readonly updateSettings: (
     patch: AppSettingsPatch,
   ) => Promise<OperationResult<AppSettings>>;
+  readonly signalRendererReady: () => void;
   readonly onAppCommand: (listener: (command: AppCommand) => void) => () => void;
+  readonly onLibraryChanged: (listener: () => void) => () => void;
   readonly onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => () => void;

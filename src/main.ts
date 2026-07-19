@@ -16,9 +16,15 @@ import {
   type InfiniteWallRuntime,
 } from './main/ipc';
 import { buildContentSecurityPolicy } from './main/content-security-policy';
+import { LaunchAtLoginController } from './main/launch-at-login';
+import { RendererEventQueue } from './main/renderer-event-queue';
 import { CODEX_SETUP_URL } from './shared/app-info';
 import { IPC_CHANNELS } from './shared/ipc';
-import { THEME_IDS, type AppSettings } from './shared/contracts';
+import {
+  THEME_IDS,
+  type AppCommand,
+  type AppSettings,
+} from './shared/contracts';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -29,6 +35,8 @@ let tray: Tray | null = null;
 let quitting = false;
 let shutdownStarted = false;
 let shutdownReady = false;
+const appCommandQueue = new RendererEventQueue<AppCommand>();
+const libraryRefreshQueue = new RendererEventQueue<true>();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -75,7 +83,15 @@ const createWindow = (): BrowserWindow => {
     }
   });
   window.on('closed', () => {
-    if (mainWindow === window) mainWindow = null;
+    if (mainWindow === window) {
+      mainWindow = null;
+      appCommandQueue.markLoading();
+      libraryRefreshQueue.markLoading();
+    }
+  });
+  window.webContents.on('did-start-loading', () => {
+    appCommandQueue.markLoading();
+    libraryRefreshQueue.markLoading();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url === CODEX_SETUP_URL) {
@@ -103,9 +119,33 @@ const showMainWindow = (): BrowserWindow => {
   return mainWindow;
 };
 
-const sendAppCommand = (command: unknown): void => {
-  const window = showMainWindow();
-  window.webContents.send(IPC_CHANNELS.appCommand, command);
+const sendToRenderer = <T,>(channel: string, value: T): void => {
+  if (!mainWindow || mainWindow.webContents.isDestroyed()) {
+    return;
+  }
+  mainWindow.webContents.send(channel, value);
+};
+
+const sendAppCommand = (command: AppCommand): void => {
+  showMainWindow();
+  appCommandQueue.sendOrQueue(command, (pending) => {
+    sendToRenderer(IPC_CHANNELS.appCommand, pending);
+  });
+};
+
+const notifyLibraryChanged = (): void => {
+  libraryRefreshQueue.sendOrQueue(true, () => {
+    sendToRenderer(IPC_CHANNELS.libraryChanged, true);
+  });
+};
+
+const markRendererReady = (): void => {
+  appCommandQueue.markReady((pending) => {
+    sendToRenderer(IPC_CHANNELS.appCommand, pending);
+  });
+  libraryRefreshQueue.markReady(() => {
+    sendToRenderer(IPC_CHANNELS.libraryChanged, true);
+  });
 };
 
 const rebuildTrayMenu = (settings?: AppSettings): void => {
@@ -144,15 +184,27 @@ const notify = (title: string, body: string): void => {
   if (Notification.isSupported()) new Notification({ title, body }).show();
 };
 
-app.whenReady().then(() => {
+const initializeApplication = async (): Promise<void> => {
+  await app.whenReady();
   registerContentSecurityPolicy();
+  const launchAtLogin = new LaunchAtLoginController({
+    platform: process.platform,
+    configRoot: app.getPath('appData'),
+    executablePath: process.execPath,
+    developmentAppPath: app.isPackaged ? undefined : app.getAppPath(),
+    setNativeLoginItem: (enabled) => {
+      app.setLoginItemSettings({ openAtLogin: enabled });
+    },
+  });
   runtime = registerIpcHandlers({
     jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
     libraryRoot: path.join(app.getPath('userData'), 'library'),
     settingsRoot: path.join(app.getPath('userData'), 'preferences'),
-    setLaunchAtLogin: (enabled) => app.setLoginItemSettings({ openAtLogin: enabled }),
+    setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
     notify,
     onSettingsChanged: rebuildTrayMenu,
+    onLibraryChanged: notifyLibraryChanged,
+    onRendererReady: markRendererReady,
   });
   mainWindow = createWindow();
   const iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#171b18"/><text x="16" y="23" text-anchor="middle" fill="#f0e4d4" font-size="25">∞</text></svg>';
@@ -166,7 +218,19 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     showMainWindow();
   });
-});
+};
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  quitting = true;
+  shutdownReady = true;
+  app.quit();
+} else {
+  const applicationReady = initializeApplication();
+  app.on('second-instance', () => {
+    void applicationReady.then(() => showMainWindow());
+  });
+}
 
 app.on('before-quit', (event) => {
   if (shutdownReady) {

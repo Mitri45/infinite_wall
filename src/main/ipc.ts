@@ -41,9 +41,11 @@ interface RegisterIpcHandlersOptions {
   readonly jobRoot: string;
   readonly libraryRoot: string;
   readonly settingsRoot: string;
-  readonly setLaunchAtLogin: (enabled: boolean) => void;
+  readonly setLaunchAtLogin: (enabled: boolean) => Promise<void>;
   readonly notify: (title: string, body: string) => void;
   readonly onSettingsChanged?: (settings: AppSettings) => void;
+  readonly onLibraryChanged?: () => void;
+  readonly onRendererReady?: () => void;
 }
 
 export interface InfiniteWallRuntime {
@@ -105,6 +107,7 @@ export function registerIpcHandlers(
         controller.signal,
       );
       await wallpaperService.apply(preview.record.id);
+      options.onLibraryChanged?.();
     } finally {
       generationSessions.finish(controller);
     }
@@ -113,19 +116,42 @@ export function registerIpcHandlers(
     run: runScheduledGeneration,
     onFailure: (message) => options.notify('Infinite Wall schedule', message),
   });
-  const settingsReady = settingsStore.load().then((settings) => {
-    options.setLaunchAtLogin(settings.launchAtLogin);
+  const settingsReady = settingsStore.load().then(async (settings) => {
     scheduler.configure(settings);
     options.onSettingsChanged?.(settings);
+    await options.setLaunchAtLogin(settings.launchAtLogin).catch(() => {
+      options.notify(
+        'Infinite Wall settings',
+        'Launch at login could not be configured on this computer.',
+      );
+    });
     return settings;
   });
-  const updateSettings = async (patch: AppSettingsPatch) => {
+  let settingsMutationTail: Promise<void> = Promise.resolve();
+  const updateSettings = (patch: AppSettingsPatch): Promise<AppSettings> => {
+    const operation = settingsMutationTail.then(async () => {
+      await settingsReady;
+      const previous = await settingsStore.load();
+      const settings = await settingsStore.update(patch);
+      if (settings.launchAtLogin !== previous.launchAtLogin) {
+        try {
+          await options.setLaunchAtLogin(settings.launchAtLogin);
+        } catch (error) {
+          await settingsStore.update({ launchAtLogin: previous.launchAtLogin });
+          throw error;
+        }
+      }
+      scheduler.configure(settings);
+      options.onSettingsChanged?.(settings);
+      return settings;
+    });
+    settingsMutationTail = operation.then(() => undefined, () => undefined);
+    return operation;
+  };
+  const getSettings = async (): Promise<AppSettings> => {
     await settingsReady;
-    const settings = await settingsStore.update(patch);
-    options.setLaunchAtLogin(settings.launchAtLogin);
-    scheduler.configure(settings);
-    options.onSettingsChanged?.(settings);
-    return settings;
+    await settingsMutationTail;
+    return settingsStore.load();
   };
   const applyRandomExisting = async () => {
     const items = (await wallpaperService.list()).filter(
@@ -136,6 +162,7 @@ export function registerIpcHandlers(
     }
     const selected = items[Math.floor(Math.random() * items.length)];
     await wallpaperService.apply(selected.record.id);
+    options.onLibraryChanged?.();
     return true;
   };
 
@@ -220,9 +247,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, () => {
     return generationSessions.cancel();
   });
+  ipcMain.on(IPC_CHANNELS.rendererReady, () => options.onRendererReady?.());
   ipcMain.handle(IPC_CHANNELS.getSettings, async (): Promise<OperationResult<AppSettings>> => {
     try {
-      return { ok: true, value: await settingsReady };
+      return { ok: true, value: await getSettings() };
     } catch {
       return settingsOperationFailure('Settings could not be loaded.');
     }
@@ -332,7 +360,7 @@ export function registerIpcHandlers(
   );
 
   return {
-    getSettings: () => settingsReady,
+    getSettings,
     updateSettings,
     applyRandomExisting,
     dispose: async () => {
@@ -341,6 +369,7 @@ export function registerIpcHandlers(
       await Promise.all([
         generationSessions.waitForIdle(),
         wallpaperService.dispose(),
+        settingsReady.then(() => settingsMutationTail).catch(() => undefined),
       ]);
     },
   };

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -96,7 +96,9 @@ function installBridge(
           ...patch,
         },
       }),
+      signalRendererReady: () => undefined,
       onAppCommand: () => () => undefined,
+      onLibraryChanged: () => () => undefined,
       onGenerationProgress: () => () => undefined,
       ...overrides,
     },
@@ -104,6 +106,15 @@ function installBridge(
 }
 
 describe('theme selection experience', () => {
+  it('signals readiness after installing renderer event listeners', async () => {
+    const signalRendererReady = vi.fn();
+    installBridge(readyDiagnostics, { signalRendererReady });
+
+    render(<App />);
+
+    await waitFor(() => expect(signalRendererReady).toHaveBeenCalledOnce());
+  });
+
   it('persists schedule and launch-at-login settings', async () => {
     const updateSettings = vi.fn(async (patch) => ({
       ok: true as const,
@@ -321,6 +332,78 @@ describe('theme selection experience', () => {
     expect(
       await screen.findByText('Wallpaper generation was cancelled.'),
     ).toBeTruthy();
+  });
+
+  it('ignores tray generation commands while generation is active', async () => {
+    const appCommandListener: {
+      current: Parameters<InfiniteWallApi['onAppCommand']>[0] | null;
+    } = { current: null };
+    let resolveGeneration: (
+      result: Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>,
+    ) => void = () => undefined;
+    const generateWallpaper = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>>(
+          (resolve) => {
+            resolveGeneration = resolve;
+          },
+        ),
+    );
+    installBridge(readyDiagnostics, {
+      generateWallpaper,
+      onAppCommand: (listener) => {
+        appCommandListener.current = listener;
+        return () => undefined;
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Generate wallpaper/ }));
+    expect(await screen.findByText('Creating your wallpaper')).toBeTruthy();
+    act(() => appCommandListener.current?.({ type: 'generate' }));
+    await waitFor(() => expect(generateWallpaper).toHaveBeenCalledOnce());
+    expect(screen.getByText('Creating your wallpaper')).toBeTruthy();
+
+    resolveGeneration({
+      ok: false,
+      error: {
+        code: 'cancelled',
+        message: 'Wallpaper generation was cancelled.',
+        retryable: true,
+      },
+    });
+    expect(
+      await screen.findByText('Wallpaper generation was cancelled.'),
+    ).toBeTruthy();
+  });
+
+  it('refreshes history after a main-process library mutation', async () => {
+    const libraryChangedListener: { current: (() => void) | null } = {
+      current: null,
+    };
+    const item: WallpaperLibraryItem = {
+      record: preview.record,
+      previewUrl: preview.previewUrl,
+    };
+    const listWallpapers = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, value: [] })
+      .mockResolvedValue({ ok: true as const, value: [item] });
+    installBridge(readyDiagnostics, {
+      listWallpapers,
+      onLibraryChanged: (listener) => {
+        libraryChangedListener.current = listener;
+        return () => undefined;
+      },
+    });
+    render(<App />);
+    await waitFor(() => expect(listWallpapers).toHaveBeenCalledOnce());
+
+    act(() => libraryChangedListener.current?.());
+
+    expect(await screen.findByRole('heading', { name: 'Quiet Geometry' })).toBeTruthy();
+    expect(listWallpapers).toHaveBeenCalledTimes(2);
   });
 
   it('stops offering cancellation once the library import begins', async () => {

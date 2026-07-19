@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { APP_NAME, CODEX_SETUP_URL } from '../shared/app-info';
 import type {
@@ -56,6 +56,7 @@ export function App() {
   const [generationError, setGenerationError] = useState<PublicAppError | null>(
     null,
   );
+  const generationActiveRef = useRef(false);
   const selectedTheme = getThemePack(selectedThemeId);
 
   const selectionLabel = useMemo(() => {
@@ -126,6 +127,13 @@ export function App() {
   }, [refreshLibrary]);
 
   useEffect(() => {
+    if (!window.infiniteWall?.onLibraryChanged) return undefined;
+    return window.infiniteWall.onLibraryChanged(() => {
+      void refreshLibrary();
+    });
+  }, [refreshLibrary]);
+
+  useEffect(() => {
     if (!window.infiniteWall?.getSettings) return;
     void window.infiniteWall.getSettings().then((result) => {
       if (result.ok) setSettings(result.value);
@@ -155,7 +163,7 @@ export function App() {
   );
 
   const handleGenerate = useCallback(async (themeOverride?: ThemeId) => {
-    if (!window.infiniteWall?.generateWallpaper) {
+    if (!window.infiniteWall?.generateWallpaper || generationActiveRef.current) {
       return;
     }
     if (!codexDiagnostics?.authenticated) {
@@ -167,6 +175,7 @@ export function App() {
       return;
     }
 
+    generationActiveRef.current = true;
     setGenerating(true);
     setCancelling(false);
     setPreview(null);
@@ -189,6 +198,7 @@ export function App() {
         retryable: true,
       });
     } finally {
+      generationActiveRef.current = false;
       setGenerating(false);
       setCancelling(false);
     }
@@ -200,6 +210,10 @@ export function App() {
       void handleGenerate(command.type === 'surprise' ? command.themeId : undefined);
     });
   }, [handleGenerate]);
+
+  useEffect(() => {
+    window.infiniteWall?.signalRendererReady?.();
+  }, []);
 
   const updateSettings = useCallback(async (patch: AppSettingsPatch) => {
     setSettingsError(null);
