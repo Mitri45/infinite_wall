@@ -28,6 +28,14 @@ afterEach(async () => {
 });
 
 describe('GenerationJobRunner', () => {
+  it('pins the ChatGPT-compatible GPT-5.6 SOL model', async () => {
+    const { runner } = await createRunner('assert-default-model');
+
+    await expect(runner.run(request)).resolves.toMatchObject({
+      title: 'Quiet Geometry',
+    });
+  });
+
   it('accepts one schema-valid image confined to its private job directory', async () => {
     const { runner, root } = await createRunner('success');
 

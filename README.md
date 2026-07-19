@@ -4,13 +4,17 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The first four product slices are implemented: 12 validated theme packs, a
+The first five product slices are implemented: 13 validated theme packs, a
 responsive direction library, Codex installation/login diagnostics, isolated
 generation with live progress and cancellation, atomic local-library import,
 wallpaper preview, desktop application, and local library history. Linux
 Cinnamon and GNOME are supported directly; macOS and Windows integrations are
 implemented behind the same adapter contract and covered by command-fixture
 tests pending platform acceptance runs.
+Settings now persist locally, optional 1/3/6/12/24-hour schedules generate and
+apply a new wallpaper without retry loops, launch-at-login is supported, and
+the tray provides generation, surprise, random-library, schedule, window, and
+quit actions.
 
 ## Prerequisites
 
@@ -40,6 +44,40 @@ pnpm package
 pnpm make
 ```
 
+## Install on Linux
+
+Download the `.deb` or portable ZIP from the repository's
+[GitHub Releases](https://github.com/Mitri45/infinite_wall/releases). Infinite
+Wall still requires the Codex CLI to be installed and signed in for the same
+desktop user.
+
+Debian, Ubuntu, Linux Mint, and related distributions:
+
+```bash
+sudo apt install ./infinite-wall_0.1.0_amd64.deb
+infinite-wall
+```
+
+Portable archive:
+
+```bash
+unzip 'Infinite Wall-linux-x64-0.1.0.zip'
+cd 'Infinite Wall-linux-x64'
+./infinite-wall
+```
+
+To build the same artifacts locally:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm make -- --platform linux --arch x64
+```
+
+Forge writes the `.deb` and portable ZIP under `out/make/`. Pull requests and
+main-branch builds also retain Linux, macOS, and Windows packages as GitHub
+Actions artifacts for 14 days. Pushing a version tag such as `v0.1.0` publishes
+the Linux `.deb`, portable ZIP, and `SHA256SUMS.txt` to GitHub Releases.
+
 ## Architecture and privacy
 
 The app uses Electron Forge, Vite, React, and TypeScript. The renderer is
@@ -52,8 +90,8 @@ settings. Theme content is validated at module load, and each curated pack
 contains at least four original SFW scenes.
 
 The generation runner invokes the user's local Codex CLI with an ephemeral
-session, pinned model, `workspace-write` sandbox, strict output schema, capped
-process output, and a private per-job directory under Electron's local
+session, pinned `gpt-5.6-sol` model, `workspace-write` sandbox, strict output
+schema, capped process output, and a private per-job directory under Electron's local
 `userData` directory. It accepts only one schema-valid, decodable image confined
 to that directory, verifies that its file signature and aspect ratio match the
 request, and maps Codex JSONL event types to sanitized progress phases without
@@ -80,6 +118,17 @@ Wallpaper application is owned by the main process. Cinnamon and GNOME use
 script. Image paths are supplied as separate process arguments rather than
 interpolated into executable command text. The renderer can request operations
 only by validated library record ID.
+
+Settings are stored in a private atomic JSON file under Electron `userData` and
+opened from a dedicated header drawer rather than appended to the main page.
+The main process owns scheduling and tray commands. A failed scheduled run
+produces one local notification and waits for the next configured interval;
+it never performs an immediate or costly retry.
+The settings drawer and tray also expose **Run Schedule Now**, which exercises
+the same random-theme generation, atomic import, and automatic wallpaper apply
+path immediately without waiting for the configured timer.
+Linux launch-at-login uses a private XDG autostart entry; macOS and Windows use
+Electron's native login-item integration.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

@@ -96,7 +96,7 @@ export class GenerationJobRunner {
     this.#commandArgsPrefix = options.commandArgsPrefix ?? [];
     this.#commandResolver =
       options.commandResolver ?? (() => resolveCodexCommand({ command: options.command }));
-    this.#model = options.model ?? 'gpt-5.6';
+    this.#model = options.model ?? 'gpt-5.6-sol';
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 

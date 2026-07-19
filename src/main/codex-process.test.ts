@@ -63,21 +63,26 @@ describe('runCapturedProcess', () => {
     expect(environment).not.toHaveProperty('XDG_RUNTIME_DIR');
   });
 
-  it('runs an env-node launcher found outside the desktop PATH', async () => {
-    const binDirectory = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-bin-'));
-    temporaryRoots.push(binDirectory);
-    const command = path.join(binDirectory, 'codex');
-    await writeFile(
-      command,
-      '#!/usr/bin/env node\nprocess.stdout.write("ready\\n");\n',
-    );
-    await chmod(command, 0o700);
-    await symlink(process.execPath, path.join(binDirectory, 'node'));
+  it.skipIf(process.platform === 'win32')(
+    'runs an env-node launcher found outside the desktop PATH',
+    async () => {
+      const binDirectory = await mkdtemp(
+        path.join(os.tmpdir(), 'infinite-wall-bin-'),
+      );
+      temporaryRoots.push(binDirectory);
+      const command = path.join(binDirectory, 'codex');
+      await writeFile(
+        command,
+        '#!/usr/bin/env node\nprocess.stdout.write("ready\\n");\n',
+      );
+      await chmod(command, 0o700);
+      await symlink(process.execPath, path.join(binDirectory, 'node'));
 
-    await expect(
-      runCapturedProcess({ command, args: [], timeoutMs: 1_000 }),
-    ).resolves.toMatchObject({ exitCode: 0, stdout: 'ready\n' });
-  });
+      await expect(
+        runCapturedProcess({ command, args: [], timeoutMs: 1_000 }),
+      ).resolves.toMatchObject({ exitCode: 0, stdout: 'ready\n' });
+    },
+  );
 
   it('uses a shell only for Windows command shims', () => {
     expect(requiresShell('C:\\Users\\test\\codex.cmd', 'win32')).toBe(true);

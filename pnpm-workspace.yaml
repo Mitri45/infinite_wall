@@ -25,3 +25,6 @@ allowBuilds:
   # Selects the bundled 7-Zip binary for the host architecture.
   electron-winstaller: true
   esbuild: true
+  # Native helpers used by Electron Packager to preserve macOS bundle metadata.
+  fs-xattr: true
+  macos-alias: true

@@ -7,18 +7,26 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import path from 'node:path';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: 'infinite-wall',
+    extraResource: ['assets'],
+    icon: process.platform === 'win32' ? path.resolve('assets/icon.ico') : undefined,
   },
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({}, ['win32']),
     new MakerDMG({}, ['darwin']),
     new MakerZIP({}, ['darwin', 'linux', 'win32']),
-    new MakerDeb({}, ['linux']),
+    new MakerDeb({
+      options: {
+        icon: path.resolve('assets/icon.png'),
+        categories: ['Graphics'],
+      },
+    }, ['linux']),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

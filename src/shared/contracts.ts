@@ -13,6 +13,7 @@ export const THEME_IDS = [
   'surreal',
   'seasonal',
   'illustrated',
+  'anime-waifu',
 ] as const;
 
 export const themeIdSchema = z.enum(THEME_IDS);
@@ -176,6 +177,7 @@ export const GENERATION_ERROR_CODES = [
   'not-installed',
   'outside-job-directory',
   'process-failed',
+  'settings-operation',
   'timeout',
   'wallpaper-apply',
 ] as const;
@@ -236,7 +238,7 @@ export type WallpaperLibraryItem = z.infer<typeof wallpaperLibraryItemSchema>;
 export const appSettingsSchema = z
   .object({
     quality: z.enum(['standard', 'high']).default('standard'),
-    scheduleHours: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)]).nullable(),
+    scheduleHours: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)]).nullable().default(null),
     schedulePaused: z.boolean().default(false),
     launchAtLogin: z.boolean().default(false),
     libraryLimit: z.number().int().min(20).max(500).default(100),
@@ -245,3 +247,18 @@ export const appSettingsSchema = z
   .strict();
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+export const appSettingsPatchSchema = z.object({
+  quality: z.enum(['standard', 'high']).optional(),
+  scheduleHours: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)]).nullable().optional(),
+  schedulePaused: z.boolean().optional(),
+  launchAtLogin: z.boolean().optional(),
+  libraryLimit: z.number().int().min(20).max(500).optional(),
+  applyToAllDisplays: z.literal(true).optional(),
+}).strict();
+export type AppSettingsPatch = z.input<typeof appSettingsPatchSchema>;
+
+export const appCommandSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('generate') }).strict(),
+  z.object({ type: z.literal('surprise'), themeId: themeIdSchema }).strict(),
+]);
+export type AppCommand = z.infer<typeof appCommandSchema>;

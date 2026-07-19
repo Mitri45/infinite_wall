@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  AppSettingsPatch,
   CodexDiagnostics,
   WallpaperLibraryItem,
   WallpaperPreview,
@@ -80,6 +81,26 @@ function installBridge(
           retryable: false,
         },
       }),
+      getSettings: async () => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: null, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+        },
+      }),
+      runScheduleNow: async () => ({ ok: true, value: true }),
+      updateSettings: async (patch: AppSettingsPatch) => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: null, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+          ...patch,
+        },
+      }),
+      signalRendererReady: () => undefined,
+      onAppCommand: () => () => undefined,
+      onLibraryChanged: () => () => undefined,
+      onSettingsChanged: () => () => undefined,
       onGenerationProgress: () => () => undefined,
       ...overrides,
     },
@@ -87,6 +108,90 @@ function installBridge(
 }
 
 describe('theme selection experience', () => {
+  it('signals readiness after installing renderer event listeners', async () => {
+    const signalRendererReady = vi.fn();
+    installBridge(readyDiagnostics, { signalRendererReady });
+
+    render(<App />);
+
+    await waitFor(() => expect(signalRendererReady).toHaveBeenCalledOnce());
+  });
+
+  it('persists schedule and launch-at-login settings', async () => {
+    const updateSettings = vi.fn(async (patch) => ({
+      ok: true as const,
+      value: {
+        quality: 'standard' as const, scheduleHours: 3 as const,
+        schedulePaused: false, launchAtLogin: Boolean(patch.launchAtLogin),
+        libraryLimit: 100, applyToAllDisplays: true as const,
+      },
+    }));
+    installBridge(readyDiagnostics, { updateSettings });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.selectOptions(screen.getByLabelText('Wallpaper schedule'), '3');
+    await user.click(screen.getByLabelText('Launch Infinite Wall at login'));
+    expect(updateSettings).toHaveBeenCalledWith({ scheduleHours: 3, schedulePaused: false });
+    expect(updateSettings).toHaveBeenCalledWith({ launchAtLogin: true });
+  });
+
+  it('synchronizes settings changed from the tray', async () => {
+    const settingsListener: {
+      current: Parameters<InfiniteWallApi['onSettingsChanged']>[0] | null;
+    } = { current: null };
+    installBridge(readyDiagnostics, {
+      onSettingsChanged: (listener) => {
+        settingsListener.current = listener;
+        return () => undefined;
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+    act(() => settingsListener.current?.({
+      quality: 'high', scheduleHours: 3, schedulePaused: true,
+      launchAtLogin: true, libraryLimit: 100, applyToAllDisplays: true,
+    }));
+
+    expect((screen.getByLabelText('Generation quality') as HTMLSelectElement).value).toBe('high');
+    expect((screen.getByLabelText('Wallpaper schedule') as HTMLSelectElement).value).toBe('3');
+    expect(screen.getByRole('button', { name: 'Resume schedule' })).toBeTruthy();
+  });
+
+  it('opens settings in a dialog and runs the real schedule path on demand', async () => {
+    const runScheduleNow = vi.fn(async () => ({ ok: true as const, value: true }));
+    installBridge(readyDiagnostics, {
+      getSettings: async () => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: 1, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+        },
+      }),
+      runScheduleNow,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    const runNow = await screen.findByRole('button', { name: /Run schedule now/ });
+    await user.click(runNow);
+
+    expect(runScheduleNow).toHaveBeenCalledOnce();
+    expect(await screen.findByText('New wallpaper generated and applied.')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Settings' }),
+      );
+    });
+  });
+
   it('switches themes and curated scenes', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -105,6 +210,9 @@ describe('theme selection experience', () => {
     await user.click(tidalMirror);
 
     expect(tidalMirror.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      screen.getByRole('button', { name: 'Anime Waifu — Original Heroines' }),
+    ).toBeTruthy();
   });
 
   it('submits a custom direction and shows the imported preview', async () => {
@@ -285,6 +393,116 @@ describe('theme selection experience', () => {
     expect(
       await screen.findByText('Wallpaper generation was cancelled.'),
     ).toBeTruthy();
+  });
+
+  it('ignores tray generation commands while generation is active', async () => {
+    const appCommandListener: {
+      current: Parameters<InfiniteWallApi['onAppCommand']>[0] | null;
+    } = { current: null };
+    let resolveGeneration: (
+      result: Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>,
+    ) => void = () => undefined;
+    const generateWallpaper = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<InfiniteWallApi['generateWallpaper']>>>(
+          (resolve) => {
+            resolveGeneration = resolve;
+          },
+        ),
+    );
+    installBridge(readyDiagnostics, {
+      generateWallpaper,
+      onAppCommand: (listener) => {
+        appCommandListener.current = listener;
+        return () => undefined;
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Generate wallpaper/ }));
+    expect(await screen.findByText('Creating your wallpaper')).toBeTruthy();
+    act(() => appCommandListener.current?.({ type: 'generate' }));
+    await waitFor(() => expect(generateWallpaper).toHaveBeenCalledOnce());
+    expect(screen.getByText('Creating your wallpaper')).toBeTruthy();
+
+    resolveGeneration({
+      ok: false,
+      error: {
+        code: 'cancelled',
+        message: 'Wallpaper generation was cancelled.',
+        retryable: true,
+      },
+    });
+    expect(
+      await screen.findByText('Wallpaper generation was cancelled.'),
+    ).toBeTruthy();
+  });
+
+  it('locks queued tray generation while waiting for startup diagnostics', async () => {
+    const appCommandListener: {
+      current: Parameters<InfiniteWallApi['onAppCommand']>[0] | null;
+    } = { current: null };
+    let resolveDiagnostics!: (diagnostics: CodexDiagnostics) => void;
+    const checkCodex = vi.fn(() => new Promise<CodexDiagnostics>((resolve) => {
+      resolveDiagnostics = resolve;
+    }));
+    const generateWallpaper = vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: 'cancelled' as const,
+        message: 'Test complete.',
+        retryable: true,
+      },
+    }));
+    installBridge(readyDiagnostics, {
+      checkCodex,
+      generateWallpaper,
+      onAppCommand: (listener) => {
+        appCommandListener.current = listener;
+        return () => undefined;
+      },
+    });
+    render(<App />);
+    await waitFor(() => expect(appCommandListener.current).not.toBeNull());
+
+    act(() => {
+      appCommandListener.current?.({ type: 'generate' });
+      appCommandListener.current?.({ type: 'surprise', themeId: 'nature' });
+    });
+    expect(generateWallpaper).not.toHaveBeenCalled();
+    resolveDiagnostics(readyDiagnostics);
+
+    await waitFor(() => expect(generateWallpaper).toHaveBeenCalledOnce());
+    expect(checkCodex).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes history after a main-process library mutation', async () => {
+    const libraryChangedListener: { current: (() => void) | null } = {
+      current: null,
+    };
+    const item: WallpaperLibraryItem = {
+      record: preview.record,
+      previewUrl: preview.previewUrl,
+    };
+    const listWallpapers = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, value: [] })
+      .mockResolvedValue({ ok: true as const, value: [item] });
+    installBridge(readyDiagnostics, {
+      listWallpapers,
+      onLibraryChanged: (listener) => {
+        libraryChangedListener.current = listener;
+        return () => undefined;
+      },
+    });
+    render(<App />);
+    await waitFor(() => expect(listWallpapers).toHaveBeenCalledOnce());
+
+    act(() => libraryChangedListener.current?.());
+
+    expect(await screen.findByRole('heading', { name: 'Quiet Geometry' })).toBeTruthy();
+    expect(listWallpapers).toHaveBeenCalledTimes(2);
   });
 
   it('stops offering cancellation once the library import begins', async () => {

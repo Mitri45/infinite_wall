@@ -1,10 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import type {
+  AppCommand,
+  AppSettings,
+  AppSettingsPatch,
   GenerationProgress,
   GenerationRequest,
 } from './shared/contracts';
-import { generationProgressSchema, identifierSchema } from './shared/contracts';
+import {
+  appCommandSchema,
+  appSettingsSchema,
+  appSettingsPatchSchema,
+  generationProgressSchema,
+  identifierSchema,
+} from './shared/contracts';
 import type { InfiniteWallApi } from './shared/ipc';
 import { IPC_CHANNELS } from './shared/ipc';
 
@@ -26,6 +35,21 @@ const api: InfiniteWallApi = Object.freeze({
       identifierSchema.parse(recordId),
       favorite,
     ),
+  getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  runScheduleNow: () => ipcRenderer.invoke(IPC_CHANNELS.runScheduleNow),
+  updateSettings: (patch: AppSettingsPatch) =>
+    ipcRenderer.invoke(IPC_CHANNELS.updateSettings, appSettingsPatchSchema.parse(patch)),
+  signalRendererReady: () => ipcRenderer.send(IPC_CHANNELS.rendererReady),
+  onAppCommand: (listener: (command: AppCommand) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: unknown) => {
+      const parsed = appCommandSchema.safeParse(command);
+      if (parsed.success) {
+        listener(parsed.data);
+      }
+    };
+    ipcRenderer.on(IPC_CHANNELS.appCommand, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.appCommand, handler);
+  },
   onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => {
@@ -37,6 +61,19 @@ const api: InfiniteWallApi = Object.freeze({
     };
     ipcRenderer.on(IPC_CHANNELS.generationProgress, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.generationProgress, handler);
+  },
+  onLibraryChanged: (listener: () => void) => {
+    const handler = () => listener();
+    ipcRenderer.on(IPC_CHANNELS.libraryChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, handler);
+  },
+  onSettingsChanged: (listener: (settings: AppSettings) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, settings: unknown) => {
+      const parsed = appSettingsSchema.safeParse(settings);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC_CHANNELS.settingsChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, handler);
   },
 });
 
