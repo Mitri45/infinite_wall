@@ -1,4 +1,4 @@
-import type { InfiniteWallApi } from './preload';
+import type { InfiniteWallApi } from './shared/ipc';
 
 declare global {
   interface Window {
