@@ -17,6 +17,7 @@ import {
 } from '../shared/contracts';
 import { IPC_CHANNELS } from '../shared/ipc';
 import { CodexDiagnosticsService } from './codex-diagnostics';
+import { assertCodexReadyForGeneration } from './codex-readiness';
 import { resolveCodexCommand } from './codex-command';
 import { physicalDisplayDimensions } from './display-dimensions';
 import {
@@ -98,9 +99,7 @@ export function registerIpcHandlers(
       if (runtimeDisposing) {
         throw new Error('The application is shutting down.');
       }
-      if (!readiness.authenticated) {
-        throw new Error('Codex is not ready.');
-      }
+      assertCodexReadyForGeneration(readiness);
       const settings = await settingsStore.load();
       const themeId = THEME_IDS[Math.floor(Math.random() * THEME_IDS.length)];
       const controller = generationSessions.start();
@@ -115,9 +114,11 @@ export function registerIpcHandlers(
           },
           controller.signal,
         );
-        options.onLibraryChanged?.();
-        await wallpaperService.apply(preview.record.id);
-        options.onLibraryChanged?.();
+        try {
+          await wallpaperService.apply(preview.record.id);
+        } finally {
+          options.onLibraryChanged?.();
+        }
       } finally {
         generationSessions.finish(controller);
       }

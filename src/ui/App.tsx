@@ -222,23 +222,23 @@ export function App() {
     if (!window.infiniteWall?.generateWallpaper || generationActiveRef.current) {
       return;
     }
-    const diagnostics = codexDiagnostics ?? await checkCodex();
-    if (!diagnostics?.authenticated) {
-      setGenerationError({
-        code: 'not-authenticated',
-        message: 'Finish Codex setup before generating a wallpaper.',
-        retryable: false,
-      });
-      return;
-    }
-
     generationActiveRef.current = true;
-    setGenerating(true);
-    setCancelling(false);
-    setPreview(null);
-    setGenerationError(null);
-    setProgress(INITIAL_PROGRESS);
     try {
+      const diagnostics = codexDiagnostics ?? await checkCodex();
+      if (!diagnostics?.authenticated) {
+        setGenerationError({
+          code: 'not-authenticated',
+          message: 'Finish Codex setup before generating a wallpaper.',
+          retryable: false,
+        });
+        return;
+      }
+
+      setGenerating(true);
+      setCancelling(false);
+      setPreview(null);
+      setGenerationError(null);
+      setProgress(INITIAL_PROGRESS);
       const result = await window.infiniteWall.generateWallpaper(
         await buildRequest(themeOverride),
       );

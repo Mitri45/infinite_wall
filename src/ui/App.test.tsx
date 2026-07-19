@@ -439,7 +439,7 @@ describe('theme selection experience', () => {
     ).toBeTruthy();
   });
 
-  it('waits for startup diagnostics before running a queued tray command', async () => {
+  it('locks queued tray generation while waiting for startup diagnostics', async () => {
     const appCommandListener: {
       current: Parameters<InfiniteWallApi['onAppCommand']>[0] | null;
     } = { current: null };
@@ -466,7 +466,10 @@ describe('theme selection experience', () => {
     render(<App />);
     await waitFor(() => expect(appCommandListener.current).not.toBeNull());
 
-    act(() => appCommandListener.current?.({ type: 'generate' }));
+    act(() => {
+      appCommandListener.current?.({ type: 'generate' });
+      appCommandListener.current?.({ type: 'surprise', themeId: 'nature' });
+    });
     expect(generateWallpaper).not.toHaveBeenCalled();
     resolveDiagnostics(readyDiagnostics);
 
