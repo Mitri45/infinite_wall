@@ -32,7 +32,9 @@ describe('LaunchAtLoginController', () => {
     expect(await readFile(entryPath, 'utf8')).toContain(
       'Exec="/opt/Infinite Wall/infinite-wall"',
     );
-    expect((await stat(entryPath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(entryPath)).mode & 0o777).toBe(0o600);
+    }
     expect(setNativeLoginItem).not.toHaveBeenCalled();
 
     await controller.setEnabled(false);

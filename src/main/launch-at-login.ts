@@ -21,7 +21,7 @@ export class LaunchAtLoginController {
   constructor(options: LaunchAtLoginOptions) {
     const pathApi = options.platform === 'win32' ? path.win32 : path.posix;
     this.#platform = options.platform;
-    this.#configRoot = pathApi.resolve(options.configRoot);
+    this.#configRoot = path.resolve(options.configRoot);
     this.#executablePath = pathApi.resolve(options.executablePath);
     this.#developmentAppPath = options.developmentAppPath
       ? pathApi.resolve(options.developmentAppPath)
