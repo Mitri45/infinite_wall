@@ -4,18 +4,19 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The first product slice is implemented: 12 validated theme packs, curated and
-weighted scene selection, recent-concept exclusion, custom directions, and a
-responsive theme library. Generation and persistence wiring are the next
-milestone. The release target is Linux, with OS integrations kept modular for
-macOS and Windows.
+The first two product slices are implemented: 12 validated theme packs, a
+responsive direction library, Codex installation/login diagnostics, and an
+isolated generation-job runner. The renderer does not start real generation
+yet; preview, library import, and wallpaper application are the next milestone.
+The release target is Linux, with OS integrations kept modular for macOS and
+Windows.
 
 ## Prerequisites
 
 - Node.js 22 or newer
 - pnpm 11.13.0
 - Git
-- Codex CLI (generation work is not wired up yet)
+- [Codex CLI](https://developers.openai.com/codex/cli/), installed and signed in
 
 ## Development
 
@@ -38,14 +39,21 @@ The app uses Electron Forge, Vite, React, and TypeScript. The renderer is
 sandboxed, has no Node.js access, and talks to the main process only through a
 narrow typed preload API.
 
-Shared Zod contracts define theme packs, generation requests and results,
-wallpaper records, and application settings. Theme content is validated at
-module load, and each curated pack contains at least four original SFW scenes.
+Shared Zod contracts define theme packs, Codex diagnostics, generation requests
+and results, public error responses, wallpaper records, and application
+settings. Theme content is validated at module load, and each curated pack
+contains at least four original SFW scenes.
 
-The planned generation path runs the user's local Codex CLI. Generated images,
-prompts, settings, and history will stay under Electron's local `userData`
-directory. Infinite Wall will not add analytics, telemetry, a third-party cloud
-backend, or a direct API-key fallback.
+The generation runner invokes the user's local Codex CLI with an ephemeral
+session, pinned model, `workspace-write` sandbox, strict output schema, capped
+process output, and a private per-job directory under Electron's local
+`userData` directory. It accepts only one schema-valid, decodable image confined
+to that directory. Child processes receive an allowlisted environment rather
+than the renderer or the app's complete environment.
+
+Generated images, prompts, settings, and history stay local. Infinite Wall does
+not add analytics, telemetry, a third-party cloud backend, or a direct API-key
+fallback. Integration tests use a fake Codex process and do not consume credits.
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the complete product,
 testing, and delivery plan.

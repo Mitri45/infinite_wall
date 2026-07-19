@@ -240,7 +240,7 @@ button {
 }
 
 .topbar-meta,
-.local-badge {
+.codex-status {
   display: flex;
   align-items: center;
 }
@@ -253,8 +253,58 @@ button {
   text-transform: uppercase;
 }
 
-.local-badge {
+.codex-status {
   gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: #aeb3ae;
+  background: rgb(255 255 255 / 3%);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.codex-status-ready {
+  color: #b9dbc9;
+  border-color: rgb(119 212 166 / 18%);
+  background: rgb(119 212 166 / 5%);
+}
+
+.codex-status-preview {
+  color: #9fa49f;
+}
+
+.codex-status-action {
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.codex-status-action:hover {
+  color: #f0d8aa;
+  border-color: rgb(232 180 95 / 35%);
+  background: rgb(232 180 95 / 7%);
+}
+
+.status-alert {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid rgb(232 180 95 / 55%);
+  border-radius: 50%;
+  color: #e8b45f;
+  font-size: 0.62rem;
+}
+
+.status-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-top-color: var(--accent-strong);
+  border-radius: 50%;
+  animation: status-spin 800ms linear infinite;
 }
 
 .local-dot {
@@ -268,6 +318,83 @@ button {
 .platform-label {
   padding-left: 18px;
   border-left: 1px solid rgb(255 255 255 / 12%);
+}
+
+.codex-onboarding {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  margin: -10px 0 34px;
+  padding: 22px 24px;
+  border: 1px solid rgb(232 180 95 / 19%);
+  border-radius: 20px;
+  background:
+    linear-gradient(110deg, rgb(232 180 95 / 7%), transparent 45%),
+    rgb(255 255 255 / 2%);
+}
+
+.codex-onboarding-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgb(232 180 95 / 25%);
+  border-radius: 12px;
+  color: #e8b45f;
+  background: rgb(232 180 95 / 6%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.codex-onboarding h2 {
+  margin: 4px 0 6px;
+  color: #f1efe8;
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  letter-spacing: -0.025em;
+}
+
+.codex-onboarding p:not(.eyebrow) {
+  margin: 0;
+  color: #9da29d;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.codex-onboarding-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.codex-onboarding-actions a,
+.codex-onboarding-actions button,
+.codex-onboarding-actions code {
+  min-height: 36px;
+  padding: 9px 13px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  color: #d8dad5;
+  background: rgb(255 255 255 / 4%);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.codex-onboarding-actions button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.codex-onboarding-actions a:hover,
+.codex-onboarding-actions button:hover {
+  color: #fff4df;
+  border-color: rgb(232 180 95 / 38%);
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .workspace {
@@ -804,8 +931,10 @@ h2 {
     min-height: 64px;
   }
 
-  .local-badge {
-    display: none;
+  .codex-status {
+    max-width: 145px;
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .platform-label {
@@ -815,6 +944,14 @@ h2 {
 
   .workspace {
     padding-top: 28px;
+  }
+
+  .codex-onboarding {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .codex-onboarding-actions {
+    grid-column: 1 / -1;
   }
 
   .theme-grid {

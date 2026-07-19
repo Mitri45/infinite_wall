@@ -23,3 +23,20 @@ owner. Codex authored the initial project scaffold and verification setup.
   strict while local Vite development remains usable.
 - Validated desktop and narrow-window layouts, renderer interactions, the
   Electron development launch, and the production package.
+
+## 2026-07-19 — Codex diagnostics and isolated job runner
+
+- Added startup diagnostics for the installed Codex version and local login
+  state, with actionable installation and sign-in onboarding states.
+- Added typed renderer-to-main IPC for diagnostics, generation, and
+  cancellation while keeping the renderer sandboxed.
+- Built a one-job-at-a-time Codex runner with ephemeral sessions, pinned
+  GPT-5.6 selection, an allowlisted child environment, output limits, timeout
+  and cancellation handling, and private per-job directories.
+- Added strict JSONL/metadata parsing, path confinement, single-file checks,
+  supported-format checks, and production image decoding/dimension validation.
+- Added a fake Codex integration fixture covering success, malformed output,
+  missing or escaped images, timeouts, cancellation, moderation, network, and
+  authentication failures without using generation credits.
+- Re-ran lint, strict TypeScript checks, 39 automated tests, dependency audit,
+  and Linux production packaging.

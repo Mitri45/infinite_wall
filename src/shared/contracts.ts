@@ -92,6 +92,20 @@ export const generationRequestSchema = z.discriminatedUnion('mode', [
 
 export type GenerationRequest = z.infer<typeof generationRequestSchema>;
 
+export const codexGenerationOutputSchema = z
+  .object({
+    imagePath: z.string().min(1),
+    finalPrompt: z.string().min(24).max(4_000),
+    title: z.string().min(3).max(100),
+    themeId: themeIdSchema,
+    sceneSummary: z.string().min(12).max(240),
+  })
+  .strict();
+
+export type CodexGenerationOutput = z.infer<
+  typeof codexGenerationOutputSchema
+>;
+
 export const generationResultSchema = z
   .object({
     imagePath: z.string().min(1),
@@ -104,6 +118,50 @@ export const generationResultSchema = z
   .strict();
 
 export type GenerationResult = z.infer<typeof generationResultSchema>;
+
+export const codexDiagnosticsSchema = z
+  .object({
+    installed: z.boolean(),
+    authenticated: z.boolean(),
+    version: z.string().nullable(),
+    authMethod: z
+      .enum(['chatgpt', 'api-key', 'access-token', 'unknown'])
+      .nullable(),
+    issue: z
+      .enum(['not-installed', 'not-authenticated', 'check-failed'])
+      .nullable(),
+    message: z.string().min(1).max(240),
+  })
+  .strict();
+
+export type CodexDiagnostics = z.infer<typeof codexDiagnosticsSchema>;
+
+export const GENERATION_ERROR_CODES = [
+  'busy',
+  'cancelled',
+  'invalid-request',
+  'malformed-output',
+  'missing-image',
+  'moderation',
+  'network',
+  'not-authenticated',
+  'not-installed',
+  'outside-job-directory',
+  'process-failed',
+  'timeout',
+] as const;
+
+export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
+
+export interface PublicAppError {
+  readonly code: GenerationErrorCode;
+  readonly message: string;
+  readonly retryable: boolean;
+}
+
+export type OperationResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: PublicAppError };
 
 export const wallpaperRecordSchema = z
   .object({

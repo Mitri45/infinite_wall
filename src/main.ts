@@ -1,6 +1,9 @@
 import { app, BrowserWindow, session, shell } from 'electron';
 import path from 'node:path';
 
+import { registerIpcHandlers } from './main/ipc';
+import { CODEX_SETUP_URL } from './shared/app-info';
+
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
@@ -46,7 +49,7 @@ const createWindow = (): void => {
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) {
+    if (url === CODEX_SETUP_URL) {
       void shell.openExternal(url);
     }
 
@@ -65,6 +68,9 @@ const createWindow = (): void => {
 
 app.whenReady().then(() => {
   registerContentSecurityPolicy();
+  registerIpcHandlers({
+    jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
+  });
   createWindow();
 
   app.on('activate', () => {

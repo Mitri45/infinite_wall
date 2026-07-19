@@ -1,13 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ThemeId } from '../shared/contracts';
-import { APP_NAME } from '../shared/app-info';
+import type { CodexDiagnostics, ThemeId } from '../shared/contracts';
+import { APP_NAME, CODEX_SETUP_URL } from '../shared/app-info';
 import { getThemePack, THEME_PACKS } from '../shared/themes';
+import { CodexStatus } from './CodexStatus';
 import { ScenePicker, type SelectionMode } from './ScenePicker';
 import { ThemeCard } from './ThemeCard';
 
 export function App() {
-  const platform = window.infiniteWall?.platform ?? 'preview';
+  const platform = (window.infiniteWall?.platform as string | undefined) ?? 'preview';
+  const [codexDiagnostics, setCodexDiagnostics] =
+    useState<CodexDiagnostics | null>(null);
+  const [checkingCodex, setCheckingCodex] = useState(
+    Boolean(window.infiniteWall?.checkCodex),
+  );
   const [selectedThemeId, setSelectedThemeId] = useState<ThemeId>('minimal');
   const [mode, setMode] = useState<SelectionMode>('infinite');
   const [selectedSceneId, setSelectedSceneId] = useState(
@@ -41,6 +47,33 @@ export function App() {
 
   const canPrepare = mode !== 'custom' || customPrompt.trim().length >= 3;
 
+  const checkCodex = useCallback(async () => {
+    if (!window.infiniteWall?.checkCodex) {
+      setCheckingCodex(false);
+      return;
+    }
+
+    setCheckingCodex(true);
+    try {
+      setCodexDiagnostics(await window.infiniteWall.checkCodex());
+    } catch {
+      setCodexDiagnostics({
+        installed: false,
+        authenticated: false,
+        version: null,
+        authMethod: null,
+        issue: 'check-failed',
+        message: 'Infinite Wall could not verify Codex on this computer.',
+      });
+    } finally {
+      setCheckingCodex(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkCodex();
+  }, [checkCodex]);
+
   return (
     <div className="app-shell" data-theme={selectedTheme.id}>
       <header className="topbar">
@@ -49,10 +82,12 @@ export function App() {
           <span>{APP_NAME}</span>
         </a>
         <div className="topbar-meta">
-          <span className="local-badge">
-            <span className="local-dot" aria-hidden="true" />
-            Local by design
-          </span>
+          <CodexStatus
+            diagnostics={codexDiagnostics}
+            checking={checkingCodex}
+            preview={platform === 'preview'}
+            onRetry={() => void checkCodex()}
+          />
           <span className="platform-label">{platform}</span>
         </div>
       </header>
@@ -69,6 +104,36 @@ export function App() {
               holding onto the mood and composition you chose.
             </p>
           </div>
+
+          {codexDiagnostics?.issue && (
+            <section className="codex-onboarding" aria-labelledby="codex-setup-title">
+              <div className="codex-onboarding-mark" aria-hidden="true">›_</div>
+              <div>
+                <p className="eyebrow">One local prerequisite</p>
+                <h2 id="codex-setup-title">
+                  {codexDiagnostics.issue === 'not-installed'
+                    ? 'Install Codex to start generating'
+                    : codexDiagnostics.issue === 'not-authenticated'
+                      ? 'Sign in to Codex'
+                      : 'Check the Codex installation'}
+                </h2>
+                <p>{codexDiagnostics.message}</p>
+              </div>
+              <div className="codex-onboarding-actions">
+                {codexDiagnostics.issue === 'not-installed' && (
+                  <a href={CODEX_SETUP_URL} target="_blank" rel="noreferrer">
+                    Open setup guide
+                  </a>
+                )}
+                {codexDiagnostics.issue === 'not-authenticated' && (
+                  <code>codex login</code>
+                )}
+                <button type="button" onClick={() => void checkCodex()}>
+                  Check again
+                </button>
+              </div>
+            </section>
+          )}
 
           <div className="theme-grid" aria-label="Wallpaper theme packs">
             {THEME_PACKS.map((theme, index) => (
