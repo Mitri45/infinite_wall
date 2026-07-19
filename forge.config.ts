@@ -9,6 +9,8 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import path from 'node:path';
 
+import { includeApplicationLicense } from './build/package-license';
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -17,6 +19,11 @@ const config: ForgeConfig = {
     icon: process.platform === 'win32' ? path.resolve('assets/icon.ico') : undefined,
   },
   rebuildConfig: {},
+  hooks: {
+    postPackage: async (_forgeConfig, packageResult) => {
+      await includeApplicationLicense(packageResult.outputPaths);
+    },
+  },
   makers: [
     new MakerSquirrel({}, ['win32']),
     new MakerDMG({}, ['darwin']),

@@ -180,3 +180,19 @@ owner. Codex authored the initial project scaffold and verification setup.
   the `.deb`, portable ZIP, and SHA-256 checksums.
 - Added Linux installation, portable execution, local packaging, artifact, and
   release instructions to the README.
+
+## 2026-07-20 — Installed release acceptance and license packaging
+
+- Adopted the MIT License and updated the public package metadata and README.
+- Rebuilt the Linux `.deb` and portable ZIP from the licensed `main` branch,
+  recorded fresh SHA-256 hashes, and confirmed the Debian metadata, launcher,
+  desktop entry, and package integrity.
+- Installed Infinite Wall 0.1.0 through the system package manager and launched
+  `/usr/bin/infinite-wall` against a fresh isolated XDG profile, confirming the
+  installed application creates its profile and opens its main window.
+- Found that Electron Forge initially copied only Electron's license notice
+  into distributables. Added a tested post-package hook so the `.deb`, portable
+  ZIP, and packaged application preserve Electron's notice and append Infinite
+  Wall's MIT notice exactly once.
+- Reinstalled the corrected `.deb`, verified its packaged copyright file, and
+  completed a production dependency audit with no known vulnerabilities.
