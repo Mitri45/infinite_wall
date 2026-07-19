@@ -16,6 +16,8 @@ interface WallpaperServiceOptions {
 export class WallpaperService {
   readonly #library: WallpaperLibrary;
   readonly #adapter: WallpaperAdapter;
+  #operationTail: Promise<void> = Promise.resolve();
+  #disposed = false;
 
   constructor(options: WallpaperServiceOptions) {
     this.#library = options.library;
@@ -27,19 +29,42 @@ export class WallpaperService {
   }
 
   setFavorite(recordId: string, favorite: boolean): Promise<WallpaperRecord> {
-    return this.#library.setFavorite(recordId, favorite);
+    return this.#runOperation(() =>
+      this.#library.setFavorite(recordId, favorite),
+    );
   }
 
   delete(recordId: string): Promise<boolean> {
-    return this.#library.delete(recordId);
+    return this.#runOperation(() => this.#library.delete(recordId));
   }
 
-  async apply(recordId: string): Promise<WallpaperRecord> {
-    const imagePath = await this.#library.resolveImage(recordId);
-    if (!imagePath) {
-      throw new WallpaperLibraryError('The wallpaper could not be found.');
+  apply(recordId: string): Promise<WallpaperRecord> {
+    return this.#runOperation(async () => {
+      const imagePath = await this.#library.resolveImage(recordId);
+      if (!imagePath) {
+        throw new WallpaperLibraryError('The wallpaper could not be found.');
+      }
+      await this.#adapter.apply(imagePath);
+      return this.#library.markApplied(recordId);
+    });
+  }
+
+  dispose(): Promise<void> {
+    this.#disposed = true;
+    return this.#operationTail;
+  }
+
+  #runOperation<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.#disposed) {
+      return Promise.reject(
+        new WallpaperLibraryError('Infinite Wall is shutting down.'),
+      );
     }
-    await this.#adapter.apply(imagePath);
-    return this.#library.markApplied(recordId);
+    const result = this.#operationTail.then(operation);
+    this.#operationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 }

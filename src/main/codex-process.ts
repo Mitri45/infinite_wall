@@ -9,8 +9,6 @@ const SAFE_ENVIRONMENT_KEYS = [
   'APPDATA',
   'CODEX_HOME',
   'COMSPEC',
-  'DBUS_SESSION_BUS_ADDRESS',
-  'DISPLAY',
   'HOME',
   'LANG',
   'LC_ALL',
@@ -25,8 +23,6 @@ const SAFE_ENVIRONMENT_KEYS = [
   'WINDIR',
   'XDG_CACHE_HOME',
   'XDG_CONFIG_HOME',
-  'XDG_RUNTIME_DIR',
-  'WAYLAND_DISPLAY',
 ] as const;
 
 export interface CapturedProcessResult {
@@ -49,6 +45,7 @@ export interface CapturedProcessOptions {
   readonly signal?: AbortSignal;
   readonly maxOutputBytes?: number;
   readonly onStdoutLine?: (line: string) => void;
+  readonly environmentOverrides?: Readonly<NodeJS.ProcessEnv>;
 }
 
 export function createSanitizedEnvironment(
@@ -117,6 +114,13 @@ export function runCapturedProcess(
     let stdoutLineBuffer = '';
 
     const environment = createSanitizedEnvironment(process.env, options.command);
+    for (const [key, value] of Object.entries(
+      options.environmentOverrides ?? {},
+    )) {
+      if (value !== undefined) {
+        environment[key] = value;
+      }
+    }
     const shell = requiresShell(options.command)
       ? environment.COMSPEC ?? true
       : false;

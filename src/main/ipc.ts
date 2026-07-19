@@ -237,7 +237,10 @@ export function registerIpcHandlers(
 
   return async () => {
     generationSessions.dispose();
-    await generationSessions.waitForIdle();
+    await Promise.all([
+      generationSessions.waitForIdle(),
+      wallpaperService.dispose(),
+    ]);
   };
 }
 

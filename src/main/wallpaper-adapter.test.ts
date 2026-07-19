@@ -39,6 +39,7 @@ describe('wallpaper application adapters', () => {
       ],
       timeoutMs: 15_000,
       maxOutputBytes: 65_536,
+      environmentOverrides: {},
     });
   });
 
@@ -52,7 +53,7 @@ describe('wallpaper application adapters', () => {
 
     await adapter.apply('/tmp/wallpaper.png');
 
-    expect(runProcess).toHaveBeenCalledTimes(2);
+    expect(runProcess).toHaveBeenCalledTimes(3);
     expect(runProcess.mock.calls.map(([options]) => options.args)).toEqual([
       [
         'set',
@@ -61,12 +62,39 @@ describe('wallpaper application adapters', () => {
         'file:///tmp/wallpaper.png',
       ],
       [
+        'range',
+        'org.gnome.desktop.background',
+        'picture-uri-dark',
+      ],
+      [
         'set',
         'org.gnome.desktop.background',
         'picture-uri-dark',
         'file:///tmp/wallpaper.png',
       ],
     ]);
+  });
+
+  it('supports GNOME installations without a dark wallpaper key', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async (options) =>
+      options.args[0] === 'range' ? { ...SUCCESS, exitCode: 1 } : SUCCESS,
+    );
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: {
+        XDG_CURRENT_DESKTOP: 'GNOME',
+        DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      },
+      runProcess,
+    });
+
+    await expect(adapter.apply('/tmp/wallpaper.png')).resolves.toBeUndefined();
+
+    expect(runProcess).toHaveBeenCalledTimes(2);
+    expect(runProcess.mock.calls[0][0].environmentOverrides).toEqual({
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+    });
+    expect(runProcess.mock.calls.some(([options]) => options.args.includes('picture-uri-dark') && options.args[0] === 'set')).toBe(false);
   });
 
   it('passes macOS paths separately from the fixed AppleScript', async () => {
@@ -100,6 +128,8 @@ describe('wallpaper application adapters', () => {
     ]);
     expect(options.args.at(-1)).toBe(imagePath);
     expect(options.args.at(-2)).toContain('$imagePath = $args[0]');
+    expect(options.args.at(-2)).toContain("$ErrorActionPreference = 'Stop'");
+    expect(options.args.at(-2)).toContain("throw 'SystemParametersInfo failed'");
     expect(options.args.at(-2)).not.toContain(imagePath);
   });
 

@@ -9,6 +9,12 @@ import {
 
 const APPLY_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
+const DESKTOP_SESSION_ENVIRONMENT_KEYS = [
+  'DBUS_SESSION_BUS_ADDRESS',
+  'DISPLAY',
+  'WAYLAND_DISPLAY',
+  'XDG_RUNTIME_DIR',
+] as const;
 
 export type WallpaperProcessRunner = (
   options: CapturedProcessOptions,
@@ -74,29 +80,54 @@ class LinuxWallpaperAdapter implements WallpaperAdapter {
       .join(':')
       .toLowerCase();
     const imageUrl = pathToFileURL(imagePath).href;
+    const environmentOverrides = desktopSessionEnvironment(this.#environment);
 
     if (desktop.includes('cinnamon')) {
-      await runChecked(this.#runProcess, 'gsettings', [
-        'set',
-        'org.cinnamon.desktop.background',
-        'picture-uri',
-        imageUrl,
-      ]);
+      await runChecked(
+        this.#runProcess,
+        'gsettings',
+        [
+          'set',
+          'org.cinnamon.desktop.background',
+          'picture-uri',
+          imageUrl,
+        ],
+        environmentOverrides,
+      );
       return;
     }
     if (desktop.includes('gnome')) {
-      await runChecked(this.#runProcess, 'gsettings', [
-        'set',
-        'org.gnome.desktop.background',
-        'picture-uri',
-        imageUrl,
-      ]);
-      await runChecked(this.#runProcess, 'gsettings', [
-        'set',
-        'org.gnome.desktop.background',
-        'picture-uri-dark',
-        imageUrl,
-      ]);
+      await runChecked(
+        this.#runProcess,
+        'gsettings',
+        [
+          'set',
+          'org.gnome.desktop.background',
+          'picture-uri',
+          imageUrl,
+        ],
+        environmentOverrides,
+      );
+      if (
+        await gSettingsKeyExists(
+          this.#runProcess,
+          'org.gnome.desktop.background',
+          'picture-uri-dark',
+          environmentOverrides,
+        )
+      ) {
+        await runChecked(
+          this.#runProcess,
+          'gsettings',
+          [
+            'set',
+            'org.gnome.desktop.background',
+            'picture-uri-dark',
+            imageUrl,
+          ],
+          environmentOverrides,
+        );
+      }
       return;
     }
     throw new WallpaperAdapterError(
@@ -158,10 +189,11 @@ class UnsupportedWallpaperAdapter implements WallpaperAdapter {
 }
 
 const WINDOWS_APPLY_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
   '$imagePath = $args[0]',
-  "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value $imagePath",
+  "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value $imagePath -ErrorAction Stop",
   "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class NativeWallpaper { [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] public static extern bool SystemParametersInfo(int action, int parameter, string value, int flags); }'",
-  '[NativeWallpaper]::SystemParametersInfo(20, 0, $imagePath, 3) | Out-Null',
+  "if (-not [NativeWallpaper]::SystemParametersInfo(20, 0, $imagePath, 3)) { throw 'SystemParametersInfo failed' }",
 ].join('; ');
 
 function assertAbsoluteImagePath(
@@ -177,12 +209,14 @@ async function runChecked(
   runProcess: WallpaperProcessRunner,
   command: string,
   args: readonly string[],
+  environmentOverrides?: Readonly<NodeJS.ProcessEnv>,
 ): Promise<void> {
   const result = await runProcess({
     command,
     args,
     timeoutMs: APPLY_TIMEOUT_MS,
     maxOutputBytes: MAX_OUTPUT_BYTES,
+    ...(environmentOverrides ? { environmentOverrides } : {}),
   });
   if (
     result.exitCode !== 0 ||
@@ -195,4 +229,43 @@ async function runChecked(
       'The operating system could not apply this wallpaper.',
     );
   }
+}
+
+async function gSettingsKeyExists(
+  runProcess: WallpaperProcessRunner,
+  schema: string,
+  key: string,
+  environmentOverrides: Readonly<NodeJS.ProcessEnv>,
+): Promise<boolean> {
+  const result = await runProcess({
+    command: 'gsettings',
+    args: ['range', schema, key],
+    timeoutMs: APPLY_TIMEOUT_MS,
+    maxOutputBytes: MAX_OUTPUT_BYTES,
+    environmentOverrides,
+  });
+  if (
+    result.spawnError ||
+    result.timedOut ||
+    result.aborted ||
+    result.overflowed
+  ) {
+    throw new WallpaperAdapterError(
+      'The operating system could not apply this wallpaper.',
+    );
+  }
+  return result.exitCode === 0;
+}
+
+function desktopSessionEnvironment(
+  source: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const key of DESKTOP_SESSION_ENVIRONMENT_KEYS) {
+    const value = source[key];
+    if (value !== undefined) {
+      environment[key] = value;
+    }
+  }
+  return environment;
 }
