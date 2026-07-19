@@ -33,7 +33,9 @@ jobs:
         run: pnpm verify
       - name: Verify tag matches package version
         shell: bash
-        run: test "v$(node --print 'require(\"./package.json\").version')" = "$GITHUB_REF_NAME"
+        run: |
+          package_version="$(node --print "require('./package.json').version")"
+          test "v${package_version}" = "${GITHUB_REF_NAME}"
       - name: Build Linux installers
         run: pnpm make -- --platform linux --arch x64
       - name: Create checksums
