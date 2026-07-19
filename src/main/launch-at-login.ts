@@ -19,11 +19,12 @@ export class LaunchAtLoginController {
   readonly #setNativeLoginItem: (enabled: boolean) => void;
 
   constructor(options: LaunchAtLoginOptions) {
+    const pathApi = options.platform === 'win32' ? path.win32 : path.posix;
     this.#platform = options.platform;
-    this.#configRoot = path.resolve(options.configRoot);
-    this.#executablePath = path.resolve(options.executablePath);
+    this.#configRoot = pathApi.resolve(options.configRoot);
+    this.#executablePath = pathApi.resolve(options.executablePath);
     this.#developmentAppPath = options.developmentAppPath
-      ? path.resolve(options.developmentAppPath)
+      ? pathApi.resolve(options.developmentAppPath)
       : undefined;
     this.#setNativeLoginItem = options.setNativeLoginItem;
   }

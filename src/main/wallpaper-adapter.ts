@@ -79,7 +79,7 @@ class LinuxWallpaperAdapter implements WallpaperAdapter {
       .filter(Boolean)
       .join(':')
       .toLowerCase();
-    const imageUrl = pathToFileURL(imagePath).href;
+    const imageUrl = pathToFileURL(imagePath, { windows: false }).href;
     const environmentOverrides = desktopSessionEnvironment(this.#environment);
 
     if (desktop.includes('cinnamon')) {
