@@ -52,12 +52,23 @@ export function App() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeWallpaperId, setActiveWallpaperId] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scheduleRunning, setScheduleRunning] = useState(false);
+  const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<PublicAppError | null>(
     null,
   );
   const generationActiveRef = useRef(false);
+  const diagnosticsCheckRef = useRef<Promise<CodexDiagnostics | null> | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsDrawerRef = useRef<HTMLElement>(null);
   const selectedTheme = getThemePack(selectedThemeId);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    window.setTimeout(() => settingsButtonRef.current?.focus(), 0);
+  }, []);
 
   const selectionLabel = useMemo(() => {
     if (mode === 'infinite') {
@@ -72,26 +83,32 @@ export function App() {
     return `${scene?.title ?? 'Curated scene'} · ${selectedTheme.name}`;
   }, [mode, selectedSceneId, selectedTheme]);
 
-  const checkCodex = useCallback(async () => {
+  const checkCodex = useCallback((): Promise<CodexDiagnostics | null> => {
     if (!window.infiniteWall?.checkCodex) {
       setCheckingCodex(false);
-      return;
+      return Promise.resolve(null);
     }
+    if (diagnosticsCheckRef.current) return diagnosticsCheckRef.current;
     setCheckingCodex(true);
-    try {
-      setCodexDiagnostics(await window.infiniteWall.checkCodex());
-    } catch {
-      setCodexDiagnostics({
-        installed: false,
-        authenticated: false,
-        version: null,
-        authMethod: null,
-        issue: 'check-failed',
-        message: 'Infinite Wall could not verify Codex on this computer.',
+    const check = window.infiniteWall.checkCodex()
+      .catch((): CodexDiagnostics => ({
+          installed: false,
+          authenticated: false,
+          version: null,
+          authMethod: null,
+          issue: 'check-failed',
+          message: 'Infinite Wall could not verify Codex on this computer.',
+        }))
+      .then((diagnostics) => {
+        setCodexDiagnostics(diagnostics);
+        return diagnostics;
+      })
+      .finally(() => {
+        diagnosticsCheckRef.current = null;
+        setCheckingCodex(false);
       });
-    } finally {
-      setCheckingCodex(false);
-    }
+    diagnosticsCheckRef.current = check;
+    return check;
   }, []);
 
   useEffect(() => {
@@ -141,6 +158,45 @@ export function App() {
     }).catch(() => setSettingsError('Settings could not be loaded.'));
   }, []);
 
+  useEffect(() => {
+    if (!window.infiniteWall?.onSettingsChanged) return undefined;
+    return window.infiniteWall.onSettingsChanged((nextSettings) => {
+      setSettings(nextSettings);
+      setSettingsError(null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!settingsOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const manageDialogKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeSettings();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = settingsDrawerRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled)',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', manageDialogKeyboard);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', manageDialogKeyboard);
+    };
+  }, [closeSettings, settingsOpen]);
+
   const buildRequest = useCallback(
     async (themeOverride?: ThemeId): Promise<GenerationRequest> => {
       const display = await window.infiniteWall.getPrimaryDisplay();
@@ -166,7 +222,8 @@ export function App() {
     if (!window.infiniteWall?.generateWallpaper || generationActiveRef.current) {
       return;
     }
-    if (!codexDiagnostics?.authenticated) {
+    const diagnostics = codexDiagnostics ?? await checkCodex();
+    if (!diagnostics?.authenticated) {
       setGenerationError({
         code: 'not-authenticated',
         message: 'Finish Codex setup before generating a wallpaper.',
@@ -202,7 +259,7 @@ export function App() {
       setGenerating(false);
       setCancelling(false);
     }
-  }, [buildRequest, codexDiagnostics?.authenticated, refreshLibrary]);
+  }, [buildRequest, checkCodex, codexDiagnostics, refreshLibrary]);
 
   useEffect(() => {
     if (!window.infiniteWall?.onAppCommand) return undefined;
@@ -225,6 +282,28 @@ export function App() {
       setSettingsError('Settings could not be saved.');
     }
   }, []);
+
+  const runScheduleNow = useCallback(async () => {
+    if (!window.infiniteWall?.runScheduleNow || generationActiveRef.current) return;
+    generationActiveRef.current = true;
+    setScheduleRunning(true);
+    setScheduleMessage(null);
+    setSettingsError(null);
+    try {
+      const result = await window.infiniteWall.runScheduleNow();
+      if (result.ok) {
+        setScheduleMessage('New wallpaper generated and applied.');
+        await refreshLibrary();
+      } else {
+        setSettingsError(result.error.message);
+      }
+    } catch {
+      setSettingsError('The scheduled wallpaper could not be generated.');
+    } finally {
+      generationActiveRef.current = false;
+      setScheduleRunning(false);
+    }
+  }, [refreshLibrary]);
 
   const replaceRecord = useCallback((record: WallpaperRecord) => {
     setWallpapers((items) =>
@@ -339,6 +418,7 @@ export function App() {
   const canGenerate =
     (mode !== 'custom' || customPrompt.trim().length >= 3) &&
     codexDiagnostics?.authenticated === true &&
+    !scheduleRunning &&
     platform !== 'preview';
 
   return (
@@ -349,7 +429,16 @@ export function App() {
           <span>{APP_NAME}</span>
         </a>
         <div className="topbar-meta">
-          <a className="settings-link" href="#settings">Settings</a>
+          <button
+            className="settings-link"
+            ref={settingsButtonRef}
+            type="button"
+            aria-expanded={settingsOpen}
+            aria-controls="settings-drawer"
+            onClick={() => setSettingsOpen(true)}
+          >
+            Settings
+          </button>
           <CodexStatus
             diagnostics={codexDiagnostics}
             checking={checkingCodex}
@@ -653,36 +742,79 @@ export function App() {
           )}
         </section>
 
-        <section className="settings-panel" id="settings" aria-labelledby="settings-title">
-          <div className="history-heading">
-            <div><p className="eyebrow">Automation</p><h2 id="settings-title">Settings</h2></div>
-            <p>Stored privately on this computer</p>
-          </div>
-          <div className="settings-grid">
-            <label>
-              <span>Generation quality</span>
-              <select value={settings.quality} onChange={(event) => void updateSettings({ quality: event.target.value as AppSettings['quality'] })}>
-                <option value="standard">Standard</option><option value="high">High</option>
-              </select>
-            </label>
-            <label>
-              <span>Wallpaper schedule</span>
-              <select value={settings.scheduleHours ?? ''} onChange={(event) => void updateSettings({ scheduleHours: event.target.value ? Number(event.target.value) as 1 | 3 | 6 | 12 | 24 : null, schedulePaused: false })}>
-                <option value="">Manual only</option><option value="1">Every hour</option><option value="3">Every 3 hours</option><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option>
-              </select>
-            </label>
-            <label className="toggle-setting">
-              <input type="checkbox" checked={settings.launchAtLogin} onChange={(event) => void updateSettings({ launchAtLogin: event.target.checked })} />
-              <span>Launch Infinite Wall at login</span>
-            </label>
-            <button className="secondary-action" type="button" disabled={!settings.scheduleHours} onClick={() => void updateSettings({ schedulePaused: !settings.schedulePaused })}>
-              {settings.schedulePaused ? 'Resume schedule' : 'Pause schedule'}
-            </button>
-          </div>
-          {settingsError && <p className="library-error" role="alert">{settingsError}</p>}
-          <p className="settings-note">Scheduled failures show one local notification and wait for the next interval. Infinite Wall never enters a retry loop.</p>
-        </section>
       </main>
+
+      {settingsOpen && (
+        <div className="settings-layer">
+          <button
+            className="settings-backdrop"
+            type="button"
+            aria-label="Dismiss settings"
+            onClick={closeSettings}
+          />
+          <aside
+            className="settings-drawer"
+            ref={settingsDrawerRef}
+            id="settings-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+          >
+            <div className="settings-drawer-heading">
+              <div>
+                <p className="eyebrow">Automation</p>
+                <h2 id="settings-title">Settings</h2>
+                <p>Stored privately on this computer.</p>
+              </div>
+              <button
+                className="settings-close"
+                type="button"
+                aria-label="Close settings"
+                autoFocus
+                onClick={closeSettings}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="settings-grid">
+              <label>
+                <span>Generation quality</span>
+                <select value={settings.quality} onChange={(event) => void updateSettings({ quality: event.target.value as AppSettings['quality'] })}>
+                  <option value="standard">Standard</option><option value="high">High</option>
+                </select>
+              </label>
+              <label>
+                <span>Wallpaper schedule</span>
+                <select value={settings.scheduleHours ?? ''} onChange={(event) => {
+                  setScheduleMessage(null);
+                  void updateSettings({ scheduleHours: event.target.value ? Number(event.target.value) as 1 | 3 | 6 | 12 | 24 : null, schedulePaused: false });
+                }}>
+                  <option value="">Manual only</option><option value="1">Every hour</option><option value="3">Every 3 hours</option><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option>
+                </select>
+              </label>
+              <label className="toggle-setting">
+                <input type="checkbox" checked={settings.launchAtLogin} onChange={(event) => void updateSettings({ launchAtLogin: event.target.checked })} />
+                <span>Launch Infinite Wall at login</span>
+              </label>
+            </div>
+
+            <div className="schedule-actions">
+              <button className="secondary-action" type="button" disabled={!settings.scheduleHours || scheduleRunning} onClick={() => void updateSettings({ schedulePaused: !settings.schedulePaused })}>
+                {settings.schedulePaused ? 'Resume schedule' : 'Pause schedule'}
+              </button>
+              <button className="primary-action" type="button" disabled={!settings.scheduleHours || scheduleRunning} onClick={() => void runScheduleNow()}>
+                {scheduleRunning ? 'Generating and applying…' : 'Run schedule now'}
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+
+            {settingsError && <p className="library-error" role="alert">{settingsError}</p>}
+            {scheduleMessage && <p className="settings-success" role="status">{scheduleMessage}</p>}
+            <p className="settings-note">Run now uses the same random-theme, generate, import, and auto-apply path as the timer. Failures notify once and never enter a retry loop.</p>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

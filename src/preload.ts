@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import type {
   AppCommand,
+  AppSettings,
   AppSettingsPatch,
   GenerationProgress,
   GenerationRequest,
 } from './shared/contracts';
 import {
   appCommandSchema,
+  appSettingsSchema,
   appSettingsPatchSchema,
   generationProgressSchema,
   identifierSchema,
@@ -34,6 +36,7 @@ const api: InfiniteWallApi = Object.freeze({
       favorite,
     ),
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  runScheduleNow: () => ipcRenderer.invoke(IPC_CHANNELS.runScheduleNow),
   updateSettings: (patch: AppSettingsPatch) =>
     ipcRenderer.invoke(IPC_CHANNELS.updateSettings, appSettingsPatchSchema.parse(patch)),
   signalRendererReady: () => ipcRenderer.send(IPC_CHANNELS.rendererReady),
@@ -63,6 +66,14 @@ const api: InfiniteWallApi = Object.freeze({
     const handler = () => listener();
     ipcRenderer.on(IPC_CHANNELS.libraryChanged, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, handler);
+  },
+  onSettingsChanged: (listener: (settings: AppSettings) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, settings: unknown) => {
+      const parsed = appSettingsSchema.safeParse(settings);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC_CHANNELS.settingsChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, handler);
   },
 });
 

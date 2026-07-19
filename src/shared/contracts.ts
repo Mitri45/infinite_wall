@@ -13,6 +13,7 @@ export const THEME_IDS = [
   'surreal',
   'seasonal',
   'illustrated',
+  'anime-waifu',
 ] as const;
 
 export const themeIdSchema = z.enum(THEME_IDS);

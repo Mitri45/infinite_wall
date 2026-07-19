@@ -37,6 +37,12 @@ let shutdownStarted = false;
 let shutdownReady = false;
 const appCommandQueue = new RendererEventQueue<AppCommand>();
 const libraryRefreshQueue = new RendererEventQueue<true>();
+const settingsChangedQueue = new RendererEventQueue<AppSettings>();
+const appAssetPath = (filename: string): string => path.join(
+  app.isPackaged ? process.resourcesPath : app.getAppPath(),
+  'assets',
+  filename,
+);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -60,12 +66,14 @@ const registerContentSecurityPolicy = (): void => {
 };
 
 const createWindow = (): BrowserWindow => {
+  const applicationIcon = nativeImage.createFromPath(appAssetPath('window-icon.png'));
   const window = new BrowserWindow({
     width: 1180,
     height: 760,
     minWidth: 880,
     minHeight: 620,
     backgroundColor: '#0b1020',
+    icon: applicationIcon,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -74,6 +82,7 @@ const createWindow = (): BrowserWindow => {
       sandbox: true,
     },
   });
+  window.setIcon(applicationIcon);
 
   window.once('ready-to-show', () => window.show());
   window.on('close', (event) => {
@@ -87,11 +96,13 @@ const createWindow = (): BrowserWindow => {
       mainWindow = null;
       appCommandQueue.markLoading();
       libraryRefreshQueue.markLoading();
+      settingsChangedQueue.markLoading();
     }
   });
   window.webContents.on('did-start-loading', () => {
     appCommandQueue.markLoading();
     libraryRefreshQueue.markLoading();
+    settingsChangedQueue.markLoading();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url === CODEX_SETUP_URL) {
@@ -139,12 +150,22 @@ const notifyLibraryChanged = (): void => {
   });
 };
 
+const notifySettingsChanged = (settings: AppSettings): void => {
+  rebuildTrayMenu(settings);
+  settingsChangedQueue.sendOrQueue(settings, (pending) => {
+    sendToRenderer(IPC_CHANNELS.settingsChanged, pending);
+  });
+};
+
 const markRendererReady = (): void => {
   appCommandQueue.markReady((pending) => {
     sendToRenderer(IPC_CHANNELS.appCommand, pending);
   });
   libraryRefreshQueue.markReady(() => {
     sendToRenderer(IPC_CHANNELS.libraryChanged, true);
+  });
+  settingsChangedQueue.markReady((pending) => {
+    sendToRenderer(IPC_CHANNELS.settingsChanged, pending);
   });
 };
 
@@ -175,6 +196,13 @@ const rebuildTrayMenu = (settings?: AppSettings): void => {
         runtime?.updateSettings({ schedulePaused: !current.schedulePaused }),
       ).catch(() => notify('Infinite Wall', 'The schedule could not be updated.')),
     },
+    {
+      label: 'Run Schedule Now',
+      enabled: scheduleEnabled,
+      click: () => void runtime?.runScheduledGeneration()
+        .then(() => notify('Infinite Wall schedule', 'A new wallpaper was generated and applied.'))
+        .catch(() => notify('Infinite Wall schedule', 'The scheduled wallpaper could not be generated.')),
+    },
     { type: 'separator' },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -202,13 +230,16 @@ const initializeApplication = async (): Promise<void> => {
     settingsRoot: path.join(app.getPath('userData'), 'preferences'),
     setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
     notify,
-    onSettingsChanged: rebuildTrayMenu,
+    onSettingsChanged: notifySettingsChanged,
     onLibraryChanged: notifyLibraryChanged,
     onRendererReady: markRendererReady,
   });
   mainWindow = createWindow();
-  const iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#171b18"/><text x="16" y="23" text-anchor="middle" fill="#f0e4d4" font-size="25">∞</text></svg>';
-  tray = new Tray(nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(iconSvg).toString('base64')}`));
+  const trayImage = nativeImage
+    .createFromPath(appAssetPath('tray-icon.png'))
+    .resize({ width: 22, height: 22 });
+  trayImage.setTemplateImage(process.platform === 'darwin');
+  tray = new Tray(trayImage);
   tray.setToolTip('Infinite Wall');
   tray.on('click', () => showMainWindow());
   void runtime.getSettings().then(rebuildTrayMenu).catch(() =>

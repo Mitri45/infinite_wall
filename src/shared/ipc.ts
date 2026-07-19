@@ -23,6 +23,8 @@ export const IPC_CHANNELS = {
   listWallpapers: 'wallpaper:list',
   setWallpaperFavorite: 'wallpaper:set-favorite',
   getSettings: 'settings:get',
+  runScheduleNow: 'schedule:run-now',
+  settingsChanged: 'settings:changed',
   updateSettings: 'settings:update',
   appCommand: 'app:command',
   libraryChanged: 'library:changed',
@@ -49,12 +51,14 @@ export interface InfiniteWallApi {
     favorite: boolean,
   ) => Promise<OperationResult<WallpaperRecord>>;
   readonly getSettings: () => Promise<OperationResult<AppSettings>>;
+  readonly runScheduleNow: () => Promise<OperationResult<boolean>>;
   readonly updateSettings: (
     patch: AppSettingsPatch,
   ) => Promise<OperationResult<AppSettings>>;
   readonly signalRendererReady: () => void;
   readonly onAppCommand: (listener: (command: AppCommand) => void) => () => void;
   readonly onLibraryChanged: (listener: () => void) => () => void;
+  readonly onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
   readonly onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => () => void;

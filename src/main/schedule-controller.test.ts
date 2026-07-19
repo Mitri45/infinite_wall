@@ -65,4 +65,22 @@ describe('ScheduleController', () => {
 
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it('waits for an in-flight scheduled run during disposal', async () => {
+    vi.useFakeTimers();
+    let finishRun!: () => void;
+    const run = vi.fn(() => new Promise<void>((resolve) => { finishRun = resolve; }));
+    const scheduler = new ScheduleController({ run, onFailure: vi.fn() });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: 1 }));
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    let disposed = false;
+    const disposal = scheduler.dispose().then(() => { disposed = true; });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    finishRun();
+    await disposal;
+    expect(disposed).toBe(true);
+  });
 });

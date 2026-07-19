@@ -488,6 +488,46 @@ export const THEME_PACKS = [
       },
     ],
   }),
+  defineTheme({
+    id: 'anime-waifu',
+    name: 'Anime Waifu',
+    collection: 'Original Heroines',
+    description: 'Beautiful original adult anime heroines in cinematic, wallpaper-first scenes.',
+    palette: ['#ffd8e8', '#e89bc4', '#8f79c8', '#34284d'],
+    mood: ['elegant', 'expressive', 'cinematic'],
+    subjects: ['original adult heroines', 'fashion portraits', 'character-led landscapes'],
+    composition: 'Feature clearly adult women aged 21 or older in tasteful SFW compositions with generous desktop space; no school uniforms, youthful cues, franchises, or sexualized anatomy.',
+    sceneSeeds: [
+      {
+        id: 'anime-waifu-neon-rain',
+        title: 'Neon Rain',
+        summary: 'An adult heroine watches neon rain from a quiet elevated walkway.',
+        prompt: 'Original anime illustration of an elegant adult woman aged 25 on an elevated city walkway in neon rain, sophisticated coat, cinematic profile, wide wallpaper composition, tasteful SFW character design, no text or logos.',
+        weight: 1.1,
+      },
+      {
+        id: 'anime-waifu-wind-garden',
+        title: 'Wind Garden',
+        summary: 'An adult heroine crosses a high garden as petals move through the wind.',
+        prompt: 'Original anime illustration of an adult woman aged 24 walking through a wind-swept rooftop garden, contemporary flowing outfit, petals and distant clouds, expressive but tasteful SFW design, broad negative sky.',
+        weight: 1,
+      },
+      {
+        id: 'anime-waifu-orbit-engineer',
+        title: 'Orbit Engineer',
+        summary: 'An adult engineer rests beside a panoramic orbital-station window.',
+        prompt: 'Original anime illustration of a confident adult woman aged 28, an orbital systems engineer beside a panoramic station window, functional original uniform, luminous planet beyond, calm cinematic SFW composition.',
+        weight: 1,
+      },
+      {
+        id: 'anime-waifu-summer-train',
+        title: 'Summer Line',
+        summary: 'An adult traveler waits beside a quiet coastal train at golden hour.',
+        prompt: 'Original anime illustration of an adult woman aged 23 waiting beside a quiet coastal train at golden hour, stylish casual travel clothes, sea wind and long shadows, tasteful SFW wide wallpaper, no recognizable property.',
+        weight: 0.9,
+      },
+    ],
+  }),
 ] as const satisfies readonly ThemePack[];
 
 const THEME_BY_ID = new Map<ThemeId, ThemePack>(

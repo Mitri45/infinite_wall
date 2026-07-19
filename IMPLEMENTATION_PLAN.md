@@ -10,7 +10,7 @@ Target the **Apps for Your Life** track. Ship a tested Linux `.deb` and portable
 
 - Use Electron, React, TypeScript, Vite, pnpm 11, and Electron Forge. Keep `contextIsolation` enabled, disable renderer Node access, expose a narrow typed preload API, and apply a strict Content Security Policy.
 - Provide four primary experiences:
-  - Theme grid with 12 packs: minimal, nature, architecture, cozy, cosmic, sci-fi, fantasy, noir, abstract, surreal, seasonal, and illustrated.
+  - Theme grid with 13 packs: minimal, nature, architecture, cozy, cosmic, sci-fi, fantasy, noir, abstract, surreal, seasonal, illustrated, and Anime Waifu. Anime Waifu contains only original, clearly adult, tasteful SFW characters.
   - **Infinite** generation, where GPT-5.6 creates a new scene inside the selected theme while avoiding recent concepts.
   - Curated scene selection, with at least four hand-authored seeds per theme.
   - Custom prompt mode, still wrapped in wallpaper composition and safety constraints.

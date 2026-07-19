@@ -1,4 +1,5 @@
 import type { ThemeId, ThemePack } from '../shared/contracts';
+import { ThemeArtwork } from './ThemeArtwork';
 
 interface ThemeCardProps {
   readonly theme: ThemePack;
@@ -18,9 +19,7 @@ export function ThemeCard({ theme, index, selected, onSelect }: ThemeCardProps) 
       onClick={() => onSelect(theme.id)}
     >
       <span className="theme-card-art" aria-hidden="true">
-        <span className="card-shape card-shape-one" />
-        <span className="card-shape card-shape-two" />
-        <span className="card-shape card-shape-three" />
+        <ThemeArtwork themeId={theme.id} />
       </span>
       <span className="theme-card-copy">
         <span className="theme-index">{String(index).padStart(2, '0')}</span>

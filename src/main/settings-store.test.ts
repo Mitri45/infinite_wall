@@ -29,4 +29,15 @@ describe('SettingsStore', () => {
     await expect(store.load()).resolves.toMatchObject({ scheduleHours: null });
     await expect(store.update({ secret: true } as never)).rejects.toThrow();
   });
+
+  it('propagates settings read failures other than a missing file', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-settings-'));
+    roots.push(root);
+    const failure = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    const store = new SettingsStore(root, {
+      readText: async () => { throw failure; },
+    });
+
+    await expect(store.load()).rejects.toBe(failure);
+  });
 });

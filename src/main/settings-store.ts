@@ -11,22 +11,37 @@ import {
 
 const SETTINGS_FILENAME = 'settings.json';
 
+interface SettingsStoreOptions {
+  readonly readText?: (filePath: string) => Promise<string>;
+}
+
 export class SettingsStore {
   readonly #root: string;
   readonly #settingsPath: string;
+  readonly #readText: (filePath: string) => Promise<string>;
   #cached: AppSettings | null = null;
   #mutationTail: Promise<void> = Promise.resolve();
 
-  constructor(root: string) {
+  constructor(root: string, options: SettingsStoreOptions = {}) {
     this.#root = path.resolve(root);
     this.#settingsPath = path.join(this.#root, SETTINGS_FILENAME);
+    this.#readText = options.readText ?? ((filePath) => readFile(filePath, 'utf8'));
   }
 
   async load(): Promise<AppSettings> {
     if (this.#cached) {
       return this.#cached;
     }
-    const text = await readFile(this.#settingsPath, 'utf8').catch(() => null);
+    let text: string | null;
+    try {
+      text = await this.#readText(this.#settingsPath);
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        text = null;
+      } else {
+        throw error;
+      }
+    }
     if (text) {
       try {
         this.#cached = appSettingsSchema.parse(JSON.parse(text));
@@ -69,4 +84,8 @@ export class SettingsStore {
     this.#mutationTail = result.then(() => undefined, () => undefined);
     return result;
   }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }

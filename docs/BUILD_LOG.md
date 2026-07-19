@@ -158,3 +158,25 @@ owner. Codex authored the initial project scaffold and verification setup.
 - Kept package-manager installation and the full one-hour scheduled generation
   as explicit remaining acceptance steps; the current host session cannot run
   `dpkg` as root non-interactively.
+
+## 2026-07-19 — Visual and release polish
+
+- Replaced abstract category gradients with 13 compact original vector scenes
+  that communicate the likely subject and composition of each wallpaper pack.
+- Added an original Anime Waifu pack constrained to clearly adult, tasteful
+  SFW heroines with no school uniforms, youthful cues, or franchise imagery.
+- Added dedicated application and monochrome tray icons, connected the window
+  icon, and embedded the full-color icon in the Debian package metadata.
+- Moved global settings out of the page footer and into an accessible,
+  responsive right-side drawer opened from the persistent header.
+- Added **Run Schedule Now** to the settings drawer and tray, reusing the exact
+  random-theme generation, atomic import, and auto-apply path owned by the
+  scheduler.
+- Live-tested Run Schedule Now with Codex 0.144.6: it generated an original
+  3440x1440 Minimal wallpaper, atomically imported it, refreshed renderer
+  history, and applied it successfully through Cinnamon.
+- Added pinned, least-privilege GitHub Actions for verification and packaging
+  on Linux, macOS, and Windows, plus tag-driven Linux GitHub Releases containing
+  the `.deb`, portable ZIP, and SHA-256 checksums.
+- Added Linux installation, portable execution, local packaging, artifact, and
+  release instructions to the README.

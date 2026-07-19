@@ -13,6 +13,7 @@ export class ScheduleController {
   readonly #setTimer: NonNullable<ScheduleControllerOptions['setTimer']>;
   readonly #clearTimer: NonNullable<ScheduleControllerOptions['clearTimer']>;
   #timer: NodeJS.Timeout | null = null;
+  #activeRun: Promise<void> | null = null;
   #settings: AppSettings | null = null;
   #disposed = false;
   #revision = 0;
@@ -38,10 +39,11 @@ export class ScheduleController {
     this.#scheduleNext();
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.#disposed = true;
     this.#revision += 1;
     this.#clearScheduledTimer();
+    await this.#activeRun;
   }
 
   #scheduleNext(revision = this.#revision): void {
@@ -51,15 +53,17 @@ export class ScheduleController {
     }
     this.#timer = this.#setTimer(() => {
       this.#timer = null;
-      void this.#run()
+      const activeRun = this.#run()
         .catch(() => {
           this.#onFailure(
             'Scheduled wallpaper generation failed. Infinite Wall will try again at the next interval.',
           );
         })
         .finally(() => {
+          if (this.#activeRun === activeRun) this.#activeRun = null;
           if (revision === this.#revision) this.#scheduleNext(revision);
         });
+      this.#activeRun = activeRun;
     }, hours * 60 * 60 * 1000);
     this.#timer.unref?.();
   }
