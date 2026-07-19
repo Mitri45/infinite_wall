@@ -1,10 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import type {
+  AppCommand,
+  AppSettingsPatch,
   GenerationProgress,
   GenerationRequest,
 } from './shared/contracts';
-import { generationProgressSchema, identifierSchema } from './shared/contracts';
+import {
+  appCommandSchema,
+  appSettingsPatchSchema,
+  generationProgressSchema,
+  identifierSchema,
+} from './shared/contracts';
 import type { InfiniteWallApi } from './shared/ipc';
 import { IPC_CHANNELS } from './shared/ipc';
 
@@ -26,6 +33,19 @@ const api: InfiniteWallApi = Object.freeze({
       identifierSchema.parse(recordId),
       favorite,
     ),
+  getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  updateSettings: (patch: AppSettingsPatch) =>
+    ipcRenderer.invoke(IPC_CHANNELS.updateSettings, appSettingsPatchSchema.parse(patch)),
+  onAppCommand: (listener: (command: AppCommand) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: unknown) => {
+      const parsed = appCommandSchema.safeParse(command);
+      if (parsed.success) {
+        listener(parsed.data);
+      }
+    };
+    ipcRenderer.on(IPC_CHANNELS.appCommand, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.appCommand, handler);
+  },
   onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => {

@@ -5,6 +5,10 @@ import path from 'node:path';
 import {
   generationRequestSchema,
   identifierSchema,
+  appSettingsPatchSchema,
+  THEME_IDS,
+  type AppSettings,
+  type AppSettingsPatch,
   type GenerationProgress,
   type OperationResult,
   type WallpaperLibraryItem,
@@ -30,15 +34,28 @@ import {
   WallpaperAdapterError,
 } from './wallpaper-adapter';
 import { WallpaperService } from './wallpaper-service';
+import { SettingsStore } from './settings-store';
+import { ScheduleController } from './schedule-controller';
 
 interface RegisterIpcHandlersOptions {
   readonly jobRoot: string;
   readonly libraryRoot: string;
+  readonly settingsRoot: string;
+  readonly setLaunchAtLogin: (enabled: boolean) => void;
+  readonly notify: (title: string, body: string) => void;
+  readonly onSettingsChanged?: (settings: AppSettings) => void;
+}
+
+export interface InfiniteWallRuntime {
+  readonly dispose: () => Promise<void>;
+  readonly getSettings: () => Promise<AppSettings>;
+  readonly updateSettings: (patch: AppSettingsPatch) => Promise<AppSettings>;
+  readonly applyRandomExisting: () => Promise<boolean>;
 }
 
 export function registerIpcHandlers(
   options: RegisterIpcHandlersOptions,
-): () => Promise<void> {
+): InfiniteWallRuntime {
   const commandResolver = () => resolveCodexCommand();
   const diagnostics = new CodexDiagnosticsService({ commandResolver });
   const inspectImage = async (imagePath: string) => {
@@ -63,6 +80,64 @@ export function registerIpcHandlers(
     library,
     adapter: createWallpaperAdapter(),
   });
+  const settingsStore = new SettingsStore(options.settingsRoot);
+
+  const runScheduledGeneration = async () => {
+    if (generationSessions.busy) {
+      throw new Error('Generation is already active.');
+    }
+    const readiness = await diagnostics.check();
+    if (!readiness.authenticated) {
+      throw new Error('Codex is not ready.');
+    }
+    const settings = await settingsStore.load();
+    const themeId = THEME_IDS[Math.floor(Math.random() * THEME_IDS.length)];
+    const controller = generationSessions.start();
+    try {
+      const preview = await generationService.generate(
+        {
+          mode: 'infinite',
+          themeId,
+          display: physicalDisplayDimensions(screen.getPrimaryDisplay()),
+          quality: settings.quality,
+          recentConcepts: [],
+        },
+        controller.signal,
+      );
+      await wallpaperService.apply(preview.record.id);
+    } finally {
+      generationSessions.finish(controller);
+    }
+  };
+  const scheduler = new ScheduleController({
+    run: runScheduledGeneration,
+    onFailure: (message) => options.notify('Infinite Wall schedule', message),
+  });
+  const settingsReady = settingsStore.load().then((settings) => {
+    options.setLaunchAtLogin(settings.launchAtLogin);
+    scheduler.configure(settings);
+    options.onSettingsChanged?.(settings);
+    return settings;
+  });
+  const updateSettings = async (patch: AppSettingsPatch) => {
+    await settingsReady;
+    const settings = await settingsStore.update(patch);
+    options.setLaunchAtLogin(settings.launchAtLogin);
+    scheduler.configure(settings);
+    options.onSettingsChanged?.(settings);
+    return settings;
+  };
+  const applyRandomExisting = async () => {
+    const items = (await wallpaperService.list()).filter(
+      (item) => !item.record.applied,
+    );
+    if (items.length === 0) {
+      return false;
+    }
+    const selected = items[Math.floor(Math.random() * items.length)];
+    await wallpaperService.apply(selected.record.id);
+    return true;
+  };
 
   registerMediaProtocol(library);
 
@@ -145,6 +220,27 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, () => {
     return generationSessions.cancel();
   });
+  ipcMain.handle(IPC_CHANNELS.getSettings, async (): Promise<OperationResult<AppSettings>> => {
+    try {
+      return { ok: true, value: await settingsReady };
+    } catch {
+      return settingsOperationFailure('Settings could not be loaded.');
+    }
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.updateSettings,
+    async (_event, rawPatch): Promise<OperationResult<AppSettings>> => {
+      const patch = appSettingsPatchSchema.safeParse(rawPatch);
+      if (!patch.success) {
+        return invalidLibraryRequest();
+      }
+      try {
+        return { ok: true, value: await updateSettings(patch.data) };
+      } catch {
+        return settingsOperationFailure('Settings could not be saved.');
+      }
+    },
+  );
   ipcMain.handle(
     IPC_CHANNELS.listWallpapers,
     async (): Promise<OperationResult<WallpaperLibraryItem[]>> => {
@@ -235,12 +331,18 @@ export function registerIpcHandlers(
     },
   );
 
-  return async () => {
-    generationSessions.dispose();
-    await Promise.all([
-      generationSessions.waitForIdle(),
-      wallpaperService.dispose(),
-    ]);
+  return {
+    getSettings: () => settingsReady,
+    updateSettings,
+    applyRandomExisting,
+    dispose: async () => {
+      scheduler.dispose();
+      generationSessions.dispose();
+      await Promise.all([
+        generationSessions.waitForIdle(),
+        wallpaperService.dispose(),
+      ]);
+    },
   };
 }
 
@@ -263,6 +365,13 @@ function libraryOperationFailure<T>(message: string): OperationResult<T> {
       message,
       retryable: true,
     },
+  };
+}
+
+function settingsOperationFailure<T>(message: string): OperationResult<T> {
+  return {
+    ok: false,
+    error: { code: 'settings-operation', message, retryable: true },
   };
 }
 

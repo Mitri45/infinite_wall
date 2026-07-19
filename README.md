@@ -4,13 +4,17 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The first four product slices are implemented: 12 validated theme packs, a
+The first five product slices are implemented: 12 validated theme packs, a
 responsive direction library, Codex installation/login diagnostics, isolated
 generation with live progress and cancellation, atomic local-library import,
 wallpaper preview, desktop application, and local library history. Linux
 Cinnamon and GNOME are supported directly; macOS and Windows integrations are
 implemented behind the same adapter contract and covered by command-fixture
 tests pending platform acceptance runs.
+Settings now persist locally, optional 1/3/6/12/24-hour schedules generate and
+apply a new wallpaper without retry loops, launch-at-login is supported, and
+the tray provides generation, surprise, random-library, schedule, window, and
+quit actions.
 
 ## Prerequisites
 
@@ -80,6 +84,11 @@ Wallpaper application is owned by the main process. Cinnamon and GNOME use
 script. Image paths are supplied as separate process arguments rather than
 interpolated into executable command text. The renderer can request operations
 only by validated library record ID.
+
+Settings are stored in a private atomic JSON file under Electron `userData`.
+The main process owns scheduling and tray commands. A failed scheduled run
+produces one local notification and waits for the next configured interval;
+it never performs an immediate or costly retry.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

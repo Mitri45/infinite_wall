@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  AppSettingsPatch,
   CodexDiagnostics,
   WallpaperLibraryItem,
   WallpaperPreview,
@@ -80,6 +81,22 @@ function installBridge(
           retryable: false,
         },
       }),
+      getSettings: async () => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: null, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+        },
+      }),
+      updateSettings: async (patch: AppSettingsPatch) => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: null, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+          ...patch,
+        },
+      }),
+      onAppCommand: () => () => undefined,
       onGenerationProgress: () => () => undefined,
       ...overrides,
     },
@@ -87,6 +104,25 @@ function installBridge(
 }
 
 describe('theme selection experience', () => {
+  it('persists schedule and launch-at-login settings', async () => {
+    const updateSettings = vi.fn(async (patch) => ({
+      ok: true as const,
+      value: {
+        quality: 'standard' as const, scheduleHours: 3 as const,
+        schedulePaused: false, launchAtLogin: Boolean(patch.launchAtLogin),
+        libraryLimit: 100, applyToAllDisplays: true as const,
+      },
+    }));
+    installBridge(readyDiagnostics, { updateSettings });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText('Wallpaper schedule'), '3');
+    await user.click(screen.getByLabelText('Launch Infinite Wall at login'));
+    expect(updateSettings).toHaveBeenCalledWith({ scheduleHours: 3, schedulePaused: false });
+    expect(updateSettings).toHaveBeenCalledWith({ launchAtLogin: true });
+  });
+
   it('switches themes and curated scenes', async () => {
     const user = userEvent.setup();
     render(<App />);

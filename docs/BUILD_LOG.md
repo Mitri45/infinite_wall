@@ -91,3 +91,17 @@ owner. Codex authored the initial project scaffold and verification setup.
   without the optional dark-wallpaper setting.
 - Derived history preview labels from persisted record provenance rather than
   the currently selected generation direction.
+
+## 2026-07-19 — Settings, scheduling, and tray controls
+
+- Added atomic private settings persistence for quality, schedule state, and
+  launch-at-login preferences.
+- Added one-shot schedule coordination for 1/3/6/12/24-hour intervals; failures
+  notify once and wait until the next interval instead of retrying.
+- Scheduled runs choose a varied theme, use the primary display and configured
+  quality, import safely, and apply through the existing serialized adapter.
+- Added tray actions for Generate, Surprise Me, Apply Random Existing, opening
+  the window, pausing/resuming the schedule, and quitting cleanly.
+- Added a responsive settings panel and typed, runtime-validated preload IPC.
+- Expanded deterministic coverage to 90 tests without changing the desktop or
+  invoking live Codex generation.

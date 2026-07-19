@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { APP_NAME, CODEX_SETUP_URL } from '../shared/app-info';
 import type {
   CodexDiagnostics,
+  AppSettings,
+  AppSettingsPatch,
   GenerationProgress,
   GenerationRequest,
   PublicAppError,
@@ -19,6 +21,10 @@ const INITIAL_PROGRESS: GenerationProgress = {
   phase: 'preparing',
   message: 'Preparing generation…',
   percent: 2,
+};
+const DEFAULT_SETTINGS: AppSettings = {
+  quality: 'standard', scheduleHours: null, schedulePaused: false,
+  launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
 };
 
 type ActivePreview = WallpaperLibraryItem & {
@@ -45,6 +51,8 @@ export function App() {
   const [wallpapers, setWallpapers] = useState<WallpaperLibraryItem[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeWallpaperId, setActiveWallpaperId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<PublicAppError | null>(
     null,
   );
@@ -117,15 +125,24 @@ export function App() {
     void refreshLibrary();
   }, [refreshLibrary]);
 
+  useEffect(() => {
+    if (!window.infiniteWall?.getSettings) return;
+    void window.infiniteWall.getSettings().then((result) => {
+      if (result.ok) setSettings(result.value);
+      else setSettingsError(result.error.message);
+    }).catch(() => setSettingsError('Settings could not be loaded.'));
+  }, []);
+
   const buildRequest = useCallback(
-    async (): Promise<GenerationRequest> => {
+    async (themeOverride?: ThemeId): Promise<GenerationRequest> => {
       const display = await window.infiniteWall.getPrimaryDisplay();
       const base = {
-        themeId: selectedThemeId,
+        themeId: themeOverride ?? selectedThemeId,
         display,
-        quality: 'standard' as const,
+        quality: settings.quality,
         recentConcepts: [],
       };
+      if (themeOverride) return { ...base, mode: 'infinite' };
       if (mode === 'curated') {
         return { ...base, mode, sceneId: selectedSceneId };
       }
@@ -134,10 +151,10 @@ export function App() {
       }
       return { ...base, mode };
     },
-    [customPrompt, mode, selectedSceneId, selectedThemeId],
+    [customPrompt, mode, selectedSceneId, selectedThemeId, settings.quality],
   );
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (themeOverride?: ThemeId) => {
     if (!window.infiniteWall?.generateWallpaper) {
       return;
     }
@@ -157,7 +174,7 @@ export function App() {
     setProgress(INITIAL_PROGRESS);
     try {
       const result = await window.infiniteWall.generateWallpaper(
-        await buildRequest(),
+        await buildRequest(themeOverride),
       );
       if (result.ok) {
         setPreview({ ...result.value, source: 'generated' });
@@ -176,6 +193,24 @@ export function App() {
       setCancelling(false);
     }
   }, [buildRequest, codexDiagnostics?.authenticated, refreshLibrary]);
+
+  useEffect(() => {
+    if (!window.infiniteWall?.onAppCommand) return undefined;
+    return window.infiniteWall.onAppCommand((command) => {
+      void handleGenerate(command.type === 'surprise' ? command.themeId : undefined);
+    });
+  }, [handleGenerate]);
+
+  const updateSettings = useCallback(async (patch: AppSettingsPatch) => {
+    setSettingsError(null);
+    try {
+      const result = await window.infiniteWall.updateSettings(patch);
+      if (result.ok) setSettings(result.value);
+      else setSettingsError(result.error.message);
+    } catch {
+      setSettingsError('Settings could not be saved.');
+    }
+  }, []);
 
   const replaceRecord = useCallback((record: WallpaperRecord) => {
     setWallpapers((items) =>
@@ -300,6 +335,7 @@ export function App() {
           <span>{APP_NAME}</span>
         </a>
         <div className="topbar-meta">
+          <a className="settings-link" href="#settings">Settings</a>
           <CodexStatus
             diagnostics={codexDiagnostics}
             checking={checkingCodex}
@@ -601,6 +637,36 @@ export function App() {
               })}
             </div>
           )}
+        </section>
+
+        <section className="settings-panel" id="settings" aria-labelledby="settings-title">
+          <div className="history-heading">
+            <div><p className="eyebrow">Automation</p><h2 id="settings-title">Settings</h2></div>
+            <p>Stored privately on this computer</p>
+          </div>
+          <div className="settings-grid">
+            <label>
+              <span>Generation quality</span>
+              <select value={settings.quality} onChange={(event) => void updateSettings({ quality: event.target.value as AppSettings['quality'] })}>
+                <option value="standard">Standard</option><option value="high">High</option>
+              </select>
+            </label>
+            <label>
+              <span>Wallpaper schedule</span>
+              <select value={settings.scheduleHours ?? ''} onChange={(event) => void updateSettings({ scheduleHours: event.target.value ? Number(event.target.value) as 1 | 3 | 6 | 12 | 24 : null, schedulePaused: false })}>
+                <option value="">Manual only</option><option value="1">Every hour</option><option value="3">Every 3 hours</option><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option>
+              </select>
+            </label>
+            <label className="toggle-setting">
+              <input type="checkbox" checked={settings.launchAtLogin} onChange={(event) => void updateSettings({ launchAtLogin: event.target.checked })} />
+              <span>Launch Infinite Wall at login</span>
+            </label>
+            <button className="secondary-action" type="button" disabled={!settings.scheduleHours} onClick={() => void updateSettings({ schedulePaused: !settings.schedulePaused })}>
+              {settings.schedulePaused ? 'Resume schedule' : 'Pause schedule'}
+            </button>
+          </div>
+          {settingsError && <p className="library-error" role="alert">{settingsError}</p>}
+          <p className="settings-note">Scheduled failures show one local notification and wait for the next interval. Infinite Wall never enters a retry loop.</p>
         </section>
       </main>
     </div>

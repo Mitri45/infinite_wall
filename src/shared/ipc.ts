@@ -1,4 +1,7 @@
 import type {
+  AppCommand,
+  AppSettings,
+  AppSettingsPatch,
   CodexDiagnostics,
   DisplayDimensions,
   GenerationProgress,
@@ -19,6 +22,9 @@ export const IPC_CHANNELS = {
   deleteWallpaper: 'wallpaper:delete',
   listWallpapers: 'wallpaper:list',
   setWallpaperFavorite: 'wallpaper:set-favorite',
+  getSettings: 'settings:get',
+  updateSettings: 'settings:update',
+  appCommand: 'app:command',
 } as const;
 
 export interface InfiniteWallApi {
@@ -40,6 +46,11 @@ export interface InfiniteWallApi {
     recordId: string,
     favorite: boolean,
   ) => Promise<OperationResult<WallpaperRecord>>;
+  readonly getSettings: () => Promise<OperationResult<AppSettings>>;
+  readonly updateSettings: (
+    patch: AppSettingsPatch,
+  ) => Promise<OperationResult<AppSettings>>;
+  readonly onAppCommand: (listener: (command: AppCommand) => void) => () => void;
   readonly onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => () => void;

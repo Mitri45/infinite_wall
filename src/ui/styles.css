@@ -320,6 +320,13 @@ button {
   border-left: 1px solid rgb(255 255 255 / 12%);
 }
 
+.settings-link {
+  color: #9da29d;
+  text-decoration: none;
+}
+
+.settings-link:hover { color: #eceee8; }
+
 .codex-onboarding {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1102,6 +1109,32 @@ h2 {
   padding-top: 26px;
   border-top: 1px solid rgb(255 255 255 / 8%);
 }
+
+.settings-panel {
+  grid-column: 1 / -1;
+  padding-top: 26px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 760px;
+}
+
+.settings-grid label { display: grid; gap: 8px; color: #aeb3ae; font-size: 0.68rem; }
+.settings-grid select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 10px;
+  color: #e2e4dd;
+  background: #121613;
+}
+.toggle-setting { display: flex !important; flex-direction: row; align-items: center; }
+.toggle-setting input { accent-color: var(--accent); }
+.settings-note { margin: 16px 0 0; color: #6f746f; font-size: 0.62rem; }
 
 .history-heading {
   display: flex;
