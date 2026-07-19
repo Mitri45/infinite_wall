@@ -145,5 +145,4 @@ build log is kept in [docs/BUILD_LOG.md](docs/BUILD_LOG.md).
 
 ## License
 
-No open-source license has been selected yet. The source is publicly visible,
-but no permission to copy, modify, or redistribute it is granted at this time.
+Infinite Wall is available under the [MIT License](LICENSE).
