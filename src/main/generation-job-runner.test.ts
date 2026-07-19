@@ -43,6 +43,35 @@ describe('GenerationJobRunner', () => {
     expect(path.dirname(path.dirname(result.imagePath))).toBe(resolvedRoot);
   });
 
+  it('maps JSONL event types to progress without exposing raw event content', async () => {
+    const { runner } = await createRunner('success');
+    const progress: string[] = [];
+
+    await runner.run(request, undefined, (update) => {
+      progress.push(`${update.phase}:${update.message}`);
+    });
+
+    expect(progress).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('preparing:'),
+        expect.stringContaining('starting:'),
+        expect.stringContaining('generating:'),
+        expect.stringContaining('validating:'),
+      ]),
+    );
+    expect(progress.join('\n')).not.toContain('sensitive fake command content');
+  });
+
+  it('removes only a completed job beneath the configured job root', async () => {
+    const { runner } = await createRunner('success');
+    const result = await runner.run(request);
+
+    await runner.removeCompletedJob(result.imagePath);
+
+    await expect(realpath(result.imagePath)).rejects.toThrow();
+    await expect(runner.removeCompletedJob('/tmp/outside.png')).rejects.toThrow();
+  });
+
   it.each([
     ['malformed-jsonl', 'malformed-output'],
     ['malformed-output', 'malformed-output'],

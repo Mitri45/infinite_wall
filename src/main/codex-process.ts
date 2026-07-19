@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 
 const DEFAULT_OUTPUT_LIMIT = 1024 * 1024;
 const FORCE_KILL_DELAY_MS = 1_000;
@@ -41,6 +42,7 @@ export interface CapturedProcessOptions {
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
   readonly maxOutputBytes?: number;
+  readonly onStdoutLine?: (line: string) => void;
 }
 
 export function createSanitizedEnvironment(
@@ -75,6 +77,8 @@ export function runCapturedProcess(
     let overflowed = false;
     let settled = false;
     let forceKillTimer: NodeJS.Timeout | undefined;
+    const stdoutDecoder = new StringDecoder('utf8');
+    let stdoutLineBuffer = '';
 
     const child = spawn(options.command, [...options.args], {
       cwd: options.cwd,
@@ -94,18 +98,36 @@ export function runCapturedProcess(
       forceKillTimer.unref();
     };
 
-    const appendChunk = (target: Buffer[], chunk: Buffer) => {
+    const appendChunk = (target: Buffer[], chunk: Buffer): boolean => {
       outputBytes += chunk.byteLength;
       if (outputBytes > maxOutputBytes) {
         overflowed = true;
         stopChild();
-        return;
+        return false;
       }
 
       target.push(chunk);
+      return true;
     };
 
-    child.stdout.on('data', (chunk: Buffer) => appendChunk(stdoutChunks, chunk));
+    const emitStdoutLines = (text: string) => {
+      stdoutLineBuffer += text;
+      const lines = stdoutLineBuffer.split(/\r?\n/);
+      stdoutLineBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        try {
+          options.onStdoutLine?.(line);
+        } catch {
+          // Progress observers cannot alter the child-process lifecycle.
+        }
+      }
+    };
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (appendChunk(stdoutChunks, chunk)) {
+        emitStdoutLines(stdoutDecoder.write(chunk));
+      }
+    });
     child.stderr.on('data', (chunk: Buffer) => appendChunk(stderrChunks, chunk));
 
     const timeout = setTimeout(() => {
@@ -130,6 +152,15 @@ export function runCapturedProcess(
       }
 
       settled = true;
+      emitStdoutLines(stdoutDecoder.end());
+      if (stdoutLineBuffer.length > 0) {
+        try {
+          options.onStdoutLine?.(stdoutLineBuffer);
+        } catch {
+          // Progress observers cannot alter the child-process lifecycle.
+        }
+        stdoutLineBuffer = '';
+      }
       clearTimeout(timeout);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);

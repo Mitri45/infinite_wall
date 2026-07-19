@@ -18,7 +18,7 @@ export const THEME_IDS = [
 export const themeIdSchema = z.enum(THEME_IDS);
 export type ThemeId = z.infer<typeof themeIdSchema>;
 
-const identifierSchema = z
+export const identifierSchema = z
   .string()
   .min(3)
   .max(80)
@@ -53,12 +53,14 @@ export const themePackSchema = z
 export type SceneSeed = z.infer<typeof sceneSeedSchema>;
 export type ThemePack = z.infer<typeof themePackSchema>;
 
-const displayDimensionsSchema = z
+export const displayDimensionsSchema = z
   .object({
     width: z.number().int().min(640).max(16384),
     height: z.number().int().min(480).max(16384),
   })
   .strict();
+
+export type DisplayDimensions = z.infer<typeof displayDimensionsSchema>;
 
 const generationRequestBase = {
   themeId: themeIdSchema,
@@ -136,10 +138,30 @@ export const codexDiagnosticsSchema = z
 
 export type CodexDiagnostics = z.infer<typeof codexDiagnosticsSchema>;
 
+export const GENERATION_PROGRESS_PHASES = [
+  'preparing',
+  'starting',
+  'generating',
+  'validating',
+  'importing',
+  'complete',
+] as const;
+
+export const generationProgressSchema = z
+  .object({
+    phase: z.enum(GENERATION_PROGRESS_PHASES),
+    message: z.string().min(1).max(160),
+    percent: z.number().int().min(0).max(100),
+  })
+  .strict();
+
+export type GenerationProgress = z.infer<typeof generationProgressSchema>;
+
 export const GENERATION_ERROR_CODES = [
   'busy',
   'cancelled',
   'invalid-request',
+  'library-import',
   'malformed-output',
   'missing-image',
   'moderation',
@@ -180,6 +202,18 @@ export const wallpaperRecordSchema = z
   .strict();
 
 export type WallpaperRecord = z.infer<typeof wallpaperRecordSchema>;
+
+export const wallpaperPreviewSchema = z
+  .object({
+    record: wallpaperRecordSchema,
+    previewUrl: z
+      .string()
+      .regex(/^infinite-wall-media:\/\/wallpaper\/[a-z0-9-]+$/),
+    durationMs: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type WallpaperPreview = z.infer<typeof wallpaperPreviewSchema>;
 
 export const appSettingsSchema = z
   .object({

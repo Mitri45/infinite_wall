@@ -40,3 +40,20 @@ owner. Codex authored the initial project scaffold and verification setup.
   authentication failures without using generation credits.
 - Re-ran lint, strict TypeScript checks, 39 automated tests, dependency audit,
   and Linux production packaging.
+
+## 2026-07-19 — Generation progress, preview, and atomic import
+
+- Streamed Codex JSONL events into a small set of sanitized progress phases;
+  raw commands, prompts, reasoning, and model output never reach the renderer.
+- Connected Infinite, Curated, and Custom requests to real generation with
+  primary-display dimensions, actionable errors, and explicit cancellation.
+- Added a private atomic library importer that stages the image and metadata
+  together, decodes the copy, validates dimensions and file signatures, then
+  renames the complete item into place.
+- Added confined preview URLs backed by a custom Electron protocol so renderer
+  code receives record IDs rather than absolute filesystem paths.
+- Added renderer, image-signature, library, runner, and service-level fake
+  Codex tests covering progress, preview, cancellation, import cleanup, and
+  path confinement without consuming generation credits.
+- Re-ran lint, strict TypeScript checks, 50 automated tests, dependency audit,
+  and Linux production packaging.

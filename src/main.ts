@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, protocol, session, shell } from 'electron';
 import path from 'node:path';
 
 import { registerIpcHandlers } from './main/ipc';
@@ -7,13 +7,20 @@ import { CODEX_SETUP_URL } from './shared/app-info';
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'infinite-wall-media',
+    privileges: { secure: true, standard: true, supportFetchAPI: true },
+  },
+]);
+
 const registerContentSecurityPolicy = (): void => {
   const development = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   const policy = [
     "default-src 'self'",
     "script-src 'self'",
     `style-src 'self'${development ? " 'unsafe-inline'" : ''}`,
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: infinite-wall-media:",
     "font-src 'self' data:",
     `connect-src 'self'${development ? ' http://localhost:* ws://localhost:*' : ''}`,
     "object-src 'none'",
@@ -70,6 +77,7 @@ app.whenReady().then(() => {
   registerContentSecurityPolicy();
   registerIpcHandlers({
     jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
+    libraryRoot: path.join(app.getPath('userData'), 'library'),
   });
   createWindow();
 

@@ -14,6 +14,7 @@ import path from 'node:path';
 import {
   codexGenerationOutputSchema,
   type GenerationErrorCode,
+  type GenerationProgress,
   type GenerationRequest,
   type GenerationResult,
   type PublicAppError,
@@ -21,8 +22,10 @@ import {
 } from '../shared/contracts';
 import { runCapturedProcess } from './codex-process';
 import { buildGenerationPrompt } from './generation-prompt';
+import { verifiedImageMime } from './image-file';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
+const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.jpeg', '.jpg', '.png', '.webp']);
 
 const GENERATION_OUTPUT_JSON_SCHEMA = {
@@ -51,6 +54,10 @@ export interface ImageDimensions {
   readonly width: number;
   readonly height: number;
 }
+
+export type GenerationProgressReporter = (
+  progress: GenerationProgress,
+) => void;
 
 export class GenerationJobError extends Error {
   constructor(
@@ -91,7 +98,13 @@ export class GenerationJobRunner {
   async run(
     request: GenerationRequest,
     signal?: AbortSignal,
+    onProgress?: GenerationProgressReporter,
   ): Promise<GenerationResult> {
+    reportProgress(onProgress, {
+      phase: 'preparing',
+      message: 'Preparing a private generation workspace…',
+      percent: 5,
+    });
     await mkdir(this.#jobRoot, { recursive: true, mode: 0o700 });
     const jobDirectory = await mkdtemp(path.join(this.#jobRoot, 'job-'));
     await chmod(jobDirectory, 0o700);
@@ -109,6 +122,12 @@ export class GenerationJobRunner {
         }),
         writeFile(promptPath, prompt, { encoding: 'utf8', mode: 0o600 }),
       ]);
+
+      reportProgress(onProgress, {
+        phase: 'starting',
+        message: 'Starting Codex with the selected direction…',
+        percent: 15,
+      });
 
       const processResult = await runCapturedProcess({
         command: this.#command,
@@ -134,10 +153,21 @@ export class GenerationJobRunner {
         cwd: jobDirectory,
         timeoutMs: this.#timeoutMs,
         signal,
+        onStdoutLine: (line) => {
+          const progress = progressForCodexEvent(line);
+          if (progress) {
+            reportProgress(onProgress, progress);
+          }
+        },
       });
 
       assertProcessSucceeded(processResult);
       parseJsonLines(processResult.stdout);
+      reportProgress(onProgress, {
+        phase: 'validating',
+        message: 'Checking the generated image and metadata…',
+        percent: 82,
+      });
 
       const resultText = await readFile(resultPath, 'utf8').catch(() => {
         throw new GenerationJobError(
@@ -161,6 +191,11 @@ export class GenerationJobRunner {
         parsedResult.imagePath,
       );
       await validateDecodedImage(imagePath, this.#inspectImage);
+      reportProgress(onProgress, {
+        phase: 'validating',
+        message: 'Wallpaper passed the safety and file checks.',
+        percent: 90,
+      });
 
       return {
         ...parsedResult,
@@ -179,6 +214,91 @@ export class GenerationJobRunner {
       );
     }
   }
+
+  async removeCompletedJob(imagePath: string): Promise<void> {
+    const resolvedRoot = await realpath(this.#jobRoot);
+    const resolvedImage = await realpath(imagePath);
+    const jobDirectory = path.dirname(resolvedImage);
+    if (
+      path.dirname(jobDirectory) !== resolvedRoot ||
+      !path.basename(jobDirectory).startsWith('job-')
+    ) {
+      throw new GenerationJobError(
+        'outside-job-directory',
+        'Refusing to remove a path outside the generation job root.',
+        false,
+      );
+    }
+    await rm(jobDirectory, { recursive: true, force: true });
+  }
+}
+
+function reportProgress(
+  reporter: GenerationProgressReporter | undefined,
+  progress: GenerationProgress,
+): void {
+  try {
+    reporter?.(progress);
+  } catch {
+    // Presentation progress cannot affect generation correctness.
+  }
+}
+
+function progressForCodexEvent(line: string): GenerationProgress | null {
+  let event: unknown;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!event || typeof event !== 'object' || !('type' in event)) {
+    return null;
+  }
+
+  const type = (event as { type?: unknown }).type;
+  if (type === 'thread.started') {
+    return {
+      phase: 'starting',
+      message: 'Codex session started.',
+      percent: 22,
+    };
+  }
+  if (type === 'turn.started') {
+    return {
+      phase: 'generating',
+      message: 'Composing a new wallpaper…',
+      percent: 34,
+    };
+  }
+  if (type === 'item.started') {
+    return {
+      phase: 'generating',
+      message: 'Generating the image locally through Codex…',
+      percent: 52,
+    };
+  }
+  if (type === 'item.completed') {
+    return {
+      phase: 'generating',
+      message: 'Finalizing the generated artwork…',
+      percent: 72,
+    };
+  }
+  if (type === 'turn.completed') {
+    return {
+      phase: 'validating',
+      message: 'Codex finished. Validating the result…',
+      percent: 78,
+    };
+  }
+  if (type === 'turn.failed' || type === 'error') {
+    return {
+      phase: 'generating',
+      message: 'Codex reported a generation problem…',
+      percent: 70,
+    };
+  }
+  return null;
 }
 
 async function validateDecodedImage(
@@ -316,7 +436,11 @@ async function validateGeneratedImage(
     : path.resolve(jobDirectory, reportedImagePath);
   const candidateStats = await stat(candidatePath).catch(() => null);
 
-  if (!candidateStats?.isFile() || candidateStats.size === 0) {
+  if (
+    !candidateStats?.isFile() ||
+    candidateStats.size === 0 ||
+    candidateStats.size > MAX_IMAGE_BYTES
+  ) {
     throw new GenerationJobError(
       'missing-image',
       'Codex finished without producing a usable image.',
@@ -337,6 +461,14 @@ async function validateGeneratedImage(
     throw new GenerationJobError(
       'missing-image',
       'Codex returned an unsupported image file type.',
+      false,
+    );
+  }
+
+  if (!(await verifiedImageMime(resolvedImagePath))) {
+    throw new GenerationJobError(
+      'missing-image',
+      'Codex returned an image whose contents do not match its file type.',
       false,
     );
   }

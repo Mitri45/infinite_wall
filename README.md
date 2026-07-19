@@ -4,12 +4,12 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The first two product slices are implemented: 12 validated theme packs, a
-responsive direction library, Codex installation/login diagnostics, and an
-isolated generation-job runner. The renderer does not start real generation
-yet; preview, library import, and wallpaper application are the next milestone.
-The release target is Linux, with OS integrations kept modular for macOS and
-Windows.
+The first three product slices are implemented: 12 validated theme packs, a
+responsive direction library, Codex installation/login diagnostics, isolated
+generation with live progress and cancellation, atomic local-library import,
+and wallpaper preview. Applying wallpapers and browsing library history are the
+next milestone. The release target is Linux, with OS integrations kept modular
+for macOS and Windows.
 
 ## Prerequisites
 
@@ -48,8 +48,16 @@ The generation runner invokes the user's local Codex CLI with an ephemeral
 session, pinned model, `workspace-write` sandbox, strict output schema, capped
 process output, and a private per-job directory under Electron's local
 `userData` directory. It accepts only one schema-valid, decodable image confined
-to that directory. Child processes receive an allowlisted environment rather
-than the renderer or the app's complete environment.
+to that directory, verifies that its file signature matches its extension, and
+maps Codex JSONL event types to sanitized progress phases without forwarding raw
+model or process output. Child processes receive an allowlisted environment
+rather than the renderer or the app's complete environment.
+
+Successful jobs are copied into a private staging directory with validated
+metadata and atomically renamed into the local library. Temporary Codex job
+files are then removed. The renderer previews imported images through a
+record-ID-only custom protocol; absolute local paths are never exposed through
+the preload API.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { CodexDiagnostics, ThemeId } from '../shared/contracts';
 import { APP_NAME, CODEX_SETUP_URL } from '../shared/app-info';
+import type {
+  CodexDiagnostics,
+  GenerationProgress,
+  GenerationRequest,
+  PublicAppError,
+  ThemeId,
+  WallpaperPreview,
+} from '../shared/contracts';
 import { getThemePack, THEME_PACKS } from '../shared/themes';
 import { CodexStatus } from './CodexStatus';
 import { ScenePicker, type SelectionMode } from './ScenePicker';
 import { ThemeCard } from './ThemeCard';
+
+const INITIAL_PROGRESS: GenerationProgress = {
+  phase: 'preparing',
+  message: 'Preparing generation…',
+  percent: 2,
+};
 
 export function App() {
   const platform = (window.infiniteWall?.platform as string | undefined) ?? 'preview';
@@ -20,39 +33,33 @@ export function App() {
     getThemePack('minimal').sceneSeeds[0].id,
   );
   const [customPrompt, setCustomPrompt] = useState('');
-  const [preparedLabel, setPreparedLabel] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [progress, setProgress] = useState<GenerationProgress>(INITIAL_PROGRESS);
+  const [preview, setPreview] = useState<WallpaperPreview | null>(null);
+  const [generationError, setGenerationError] = useState<PublicAppError | null>(
+    null,
+  );
   const selectedTheme = getThemePack(selectedThemeId);
 
   const selectionLabel = useMemo(() => {
     if (mode === 'infinite') {
       return `Infinite · ${selectedTheme.name}`;
     }
-
     if (mode === 'custom') {
       return `Custom · ${selectedTheme.name}`;
     }
-
     const scene = selectedTheme.sceneSeeds.find(
       (candidate) => candidate.id === selectedSceneId,
     );
     return `${scene?.title ?? 'Curated scene'} · ${selectedTheme.name}`;
   }, [mode, selectedSceneId, selectedTheme]);
 
-  const handleThemeChange = (themeId: ThemeId) => {
-    const theme = getThemePack(themeId);
-    setSelectedThemeId(themeId);
-    setSelectedSceneId(theme.sceneSeeds[0].id);
-    setPreparedLabel(null);
-  };
-
-  const canPrepare = mode !== 'custom' || customPrompt.trim().length >= 3;
-
   const checkCodex = useCallback(async () => {
     if (!window.infiniteWall?.checkCodex) {
       setCheckingCodex(false);
       return;
     }
-
     setCheckingCodex(true);
     try {
       setCodexDiagnostics(await window.infiniteWall.checkCodex());
@@ -73,6 +80,96 @@ export function App() {
   useEffect(() => {
     void checkCodex();
   }, [checkCodex]);
+
+  useEffect(() => {
+    if (!window.infiniteWall?.onGenerationProgress) {
+      return undefined;
+    }
+    return window.infiniteWall.onGenerationProgress(setProgress);
+  }, []);
+
+  const buildRequest = useCallback(
+    async (): Promise<GenerationRequest> => {
+      const display = await window.infiniteWall.getPrimaryDisplay();
+      const base = {
+        themeId: selectedThemeId,
+        display,
+        quality: 'standard' as const,
+        recentConcepts: [],
+      };
+      if (mode === 'curated') {
+        return { ...base, mode, sceneId: selectedSceneId };
+      }
+      if (mode === 'custom') {
+        return { ...base, mode, customPrompt };
+      }
+      return { ...base, mode };
+    },
+    [customPrompt, mode, selectedSceneId, selectedThemeId],
+  );
+
+  const handleGenerate = useCallback(async () => {
+    if (!window.infiniteWall?.generateWallpaper) {
+      return;
+    }
+    if (!codexDiagnostics?.authenticated) {
+      setGenerationError({
+        code: 'not-authenticated',
+        message: 'Finish Codex setup before generating a wallpaper.',
+        retryable: false,
+      });
+      return;
+    }
+
+    setGenerating(true);
+    setCancelling(false);
+    setPreview(null);
+    setGenerationError(null);
+    setProgress(INITIAL_PROGRESS);
+    try {
+      const result = await window.infiniteWall.generateWallpaper(
+        await buildRequest(),
+      );
+      if (result.ok) {
+        setPreview(result.value);
+      } else {
+        setGenerationError(result.error);
+      }
+    } catch {
+      setGenerationError({
+        code: 'process-failed',
+        message: 'Infinite Wall lost contact with the local generation process.',
+        retryable: true,
+      });
+    } finally {
+      setGenerating(false);
+      setCancelling(false);
+    }
+  }, [buildRequest, codexDiagnostics?.authenticated]);
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    const cancelled = await window.infiniteWall.cancelGeneration().catch(() => false);
+    if (!cancelled) {
+      setCancelling(false);
+    }
+  };
+
+  const handleThemeChange = (themeId: ThemeId) => {
+    if (generating) {
+      return;
+    }
+    const theme = getThemePack(themeId);
+    setSelectedThemeId(themeId);
+    setSelectedSceneId(theme.sceneSeeds[0].id);
+    setPreview(null);
+    setGenerationError(null);
+  };
+
+  const canGenerate =
+    (mode !== 'custom' || customPrompt.trim().length >= 3) &&
+    codexDiagnostics?.authenticated === true &&
+    platform !== 'preview';
 
   return (
     <div className="app-shell" data-theme={selectedTheme.id}>
@@ -149,66 +246,141 @@ export function App() {
         </section>
 
         <aside className="direction-panel" aria-labelledby="direction-title">
-          <div className="direction-art" data-theme={selectedTheme.id} aria-hidden="true">
-            <span className="art-orbit art-orbit-one" />
-            <span className="art-orbit art-orbit-two" />
-            <span className="art-core" />
-            <span className="art-grain" />
-          </div>
+          {preview ? (
+            <div className="wallpaper-preview-frame">
+              <img
+                className="wallpaper-preview-image"
+                src={preview.previewUrl}
+                alt={`${preview.record.title} wallpaper preview`}
+              />
+              <span className="preview-saved-badge">Saved locally</span>
+            </div>
+          ) : (
+            <div className="direction-art" data-theme={selectedTheme.id} aria-hidden="true">
+              <span className="art-orbit art-orbit-one" />
+              <span className="art-orbit art-orbit-two" />
+              <span className="art-core" />
+              <span className="art-grain" />
+            </div>
+          )}
 
           <div className="direction-copy">
-            <p className="collection-label">{selectedTheme.collection}</p>
+            <p className="collection-label">
+              {preview ? 'New wallpaper' : selectedTheme.collection}
+            </p>
             <div className="direction-title-row">
-              <h2 id="direction-title">{selectedTheme.name}</h2>
-              <div className="palette" aria-label={`${selectedTheme.name} palette`}>
-                {selectedTheme.palette.map((color, index) => (
-                  <span key={color} className={`swatch swatch-${index + 1}`} />
+              <h2 id="direction-title">
+                {preview ? preview.record.title : selectedTheme.name}
+              </h2>
+              {!preview && (
+                <div className="palette" aria-label={`${selectedTheme.name} palette`}>
+                  {selectedTheme.palette.map((color, index) => (
+                    <span key={color} className={`swatch swatch-${index + 1}`} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="theme-description">
+              {preview ? preview.record.sceneSummary : selectedTheme.description}
+            </p>
+            {preview ? (
+              <p className="preview-metadata">
+                {preview.record.width} × {preview.record.height} · {selectionLabel}
+              </p>
+            ) : (
+              <div className="mood-list" aria-label="Theme mood">
+                {selectedTheme.mood.map((mood) => (
+                  <span key={mood}>{mood}</span>
                 ))}
               </div>
-            </div>
-            <p className="theme-description">{selectedTheme.description}</p>
-            <div className="mood-list" aria-label="Theme mood">
-              {selectedTheme.mood.map((mood) => (
-                <span key={mood}>{mood}</span>
-              ))}
-            </div>
+            )}
           </div>
 
-          <ScenePicker
-            theme={selectedTheme}
-            mode={mode}
-            selectedSceneId={selectedSceneId}
-            customPrompt={customPrompt}
-            onModeChange={(nextMode) => {
-              setMode(nextMode);
-              setPreparedLabel(null);
-            }}
-            onSceneChange={(sceneId) => {
-              setSelectedSceneId(sceneId);
-              setPreparedLabel(null);
-            }}
-            onCustomPromptChange={(value) => {
-              setCustomPrompt(value);
-              setPreparedLabel(null);
-            }}
-          />
+          {preview ? (
+            <div className="preview-actions">
+              <button className="primary-action" type="button" onClick={() => void handleGenerate()}>
+                Generate another
+                <span aria-hidden="true">↻</span>
+              </button>
+              <button className="secondary-action" type="button" onClick={() => setPreview(null)}>
+                Choose another direction
+              </button>
+              <p className="action-note">This wallpaper is already stored in your private local library.</p>
+            </div>
+          ) : generating ? (
+            <section className="generation-progress" aria-labelledby="generation-progress-title">
+              <div className="progress-heading">
+                <span className="generation-spinner" aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">{selectionLabel}</p>
+                  <h3 id="generation-progress-title">Creating your wallpaper</h3>
+                </div>
+                <span className="progress-percent">{progress.percent}%</span>
+              </div>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress.percent}
+                aria-label="Wallpaper generation progress"
+              >
+                <span style={{ width: `${progress.percent}%` }} />
+              </div>
+              <p className="progress-message" aria-live="polite">{progress.message}</p>
+              <button
+                className="cancel-action"
+                type="button"
+                disabled={cancelling}
+                onClick={() => void handleCancel()}
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel generation'}
+              </button>
+            </section>
+          ) : (
+            <>
+              <ScenePicker
+                theme={selectedTheme}
+                mode={mode}
+                selectedSceneId={selectedSceneId}
+                customPrompt={customPrompt}
+                onModeChange={(nextMode) => {
+                  setMode(nextMode);
+                  setGenerationError(null);
+                }}
+                onSceneChange={(sceneId) => {
+                  setSelectedSceneId(sceneId);
+                  setGenerationError(null);
+                }}
+                onCustomPromptChange={(value) => {
+                  setCustomPrompt(value);
+                  setGenerationError(null);
+                }}
+              />
 
-          <div className="panel-action">
-            <button
-              className="primary-action"
-              type="button"
-              disabled={!canPrepare}
-              onClick={() => setPreparedLabel(selectionLabel)}
-            >
-              Use this direction
-              <span aria-hidden="true">→</span>
-            </button>
-            <p className="action-note">Generation wiring comes next. No credits are used here.</p>
-          </div>
+              {generationError && (
+                <div className="generation-error" role="alert">
+                  <span aria-hidden="true">!</span>
+                  <p>{generationError.message}</p>
+                </div>
+              )}
 
-          <p className="selection-status" aria-live="polite">
-            {preparedLabel ? `Direction ready: ${preparedLabel}` : ''}
-          </p>
+              <div className="panel-action">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={!canGenerate}
+                  onClick={() => void handleGenerate()}
+                >
+                  Generate wallpaper
+                  <span aria-hidden="true">→</span>
+                </button>
+                <p className="action-note">
+                  Uses your signed-in Codex session. No API key is stored by Infinite Wall.
+                </p>
+              </div>
+            </>
+          )}
         </aside>
       </main>
     </div>
