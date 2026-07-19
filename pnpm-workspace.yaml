@@ -1,0 +1,27 @@
+packages:
+  - .
+
+# Electron Forge's packager requires a physical, non-symlinked node_modules tree.
+nodeLinker: hoisted
+
+# Keep pnpm 11's supply-chain protections explicit for a public repository.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+blockExoticSubdeps: true
+trustLockfile: false
+
+# Forge 7.x still references Electron's node-gyp fork through Git. Resolve that
+# edge to Electron's registry-published package so exotic subdependencies stay
+# blocked.
+overrides:
+  '@electron/rebuild@3>@electron/node-gyp': 10.2.0-electron.2
+  # Forge currently resolves vulnerable legacy versions through its toolchain.
+  tar: 7.5.20
+  tmp: 0.2.7
+
+# Only these reviewed packages may execute dependency lifecycle scripts.
+allowBuilds:
+  electron: true
+  # Selects the bundled 7-Zip binary for the host architecture.
+  electron-winstaller: true
+  esbuild: true

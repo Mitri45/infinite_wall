@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Electron Forge / Vite output
+.vite/
+out/
+
+# Tests and coverage
+coverage/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and local caches
+*.log
+.cache/
+.eslintcache
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local Codex and agent state
+.agents/
+.codex/
+
+# Generated application data and wallpaper jobs
+user-data/
+generated/
+jobs/
