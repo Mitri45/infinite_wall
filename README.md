@@ -18,6 +18,11 @@ for macOS and Windows.
 - Git
 - [Codex CLI](https://developers.openai.com/codex/cli/), installed and signed in
 
+Infinite Wall searches the desktop session `PATH` and common platform-specific
+install locations, including npm installations managed by nvm. If Codex lives
+elsewhere, set `INFINITE_WALL_CODEX_PATH` to its absolute executable path before
+launching the app.
+
 ## Development
 
 ```bash
@@ -48,10 +53,13 @@ The generation runner invokes the user's local Codex CLI with an ephemeral
 session, pinned model, `workspace-write` sandbox, strict output schema, capped
 process output, and a private per-job directory under Electron's local
 `userData` directory. It accepts only one schema-valid, decodable image confined
-to that directory, verifies that its file signature matches its extension, and
+to that directory, verifies that its file signature and aspect ratio match the
+request, and
 maps Codex JSONL event types to sanitized progress phases without forwarding raw
-model or process output. Child processes receive an allowlisted environment
-rather than the renderer or the app's complete environment.
+model or process output. Prompts are delivered over stdin instead of process
+arguments. Child processes receive an allowlisted environment rather than the
+renderer or the app's complete environment, and stale private job directories
+from interrupted sessions are pruned before the first new job.
 
 Successful jobs are copied into a private staging directory with validated
 metadata and atomically renamed into the local library. Temporary Codex job

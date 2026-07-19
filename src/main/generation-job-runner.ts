@@ -20,6 +20,7 @@ import {
   type PublicAppError,
   THEME_IDS,
 } from '../shared/contracts';
+import { resolveCodexCommand } from './codex-command';
 import { runCapturedProcess } from './codex-process';
 import { buildGenerationPrompt } from './generation-prompt';
 import { verifiedImageMime } from './image-file';
@@ -27,6 +28,7 @@ import { verifiedImageMime } from './image-file';
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.jpeg', '.jpg', '.png', '.webp']);
+const MAX_ASPECT_RATIO_DIFFERENCE = 0.05;
 
 const GENERATION_OUTPUT_JSON_SCHEMA = {
   type: 'object',
@@ -46,6 +48,7 @@ export interface GenerationJobRunnerOptions {
   readonly inspectImage: (imagePath: string) => Promise<ImageDimensions>;
   readonly command?: string;
   readonly commandArgsPrefix?: readonly string[];
+  readonly commandResolver?: () => Promise<string>;
   readonly model?: string;
   readonly timeoutMs?: number;
 }
@@ -81,16 +84,18 @@ export class GenerationJobError extends Error {
 export class GenerationJobRunner {
   readonly #jobRoot: string;
   readonly #inspectImage: GenerationJobRunnerOptions['inspectImage'];
-  readonly #command: string;
   readonly #commandArgsPrefix: readonly string[];
+  readonly #commandResolver: () => Promise<string>;
   readonly #model: string;
   readonly #timeoutMs: number;
+  #jobRootPreparation: Promise<void> | null = null;
 
   constructor(options: GenerationJobRunnerOptions) {
     this.#jobRoot = path.resolve(options.jobRoot);
     this.#inspectImage = options.inspectImage;
-    this.#command = options.command ?? 'codex';
     this.#commandArgsPrefix = options.commandArgsPrefix ?? [];
+    this.#commandResolver =
+      options.commandResolver ?? (() => resolveCodexCommand({ command: options.command }));
     this.#model = options.model ?? 'gpt-5.6';
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
@@ -100,12 +105,13 @@ export class GenerationJobRunner {
     signal?: AbortSignal,
     onProgress?: GenerationProgressReporter,
   ): Promise<GenerationResult> {
+    throwIfAborted(signal);
     reportProgress(onProgress, {
       phase: 'preparing',
       message: 'Preparing a private generation workspace…',
       percent: 5,
     });
-    await mkdir(this.#jobRoot, { recursive: true, mode: 0o700 });
+    await this.#prepareJobRoot();
     const jobDirectory = await mkdtemp(path.join(this.#jobRoot, 'job-'));
     await chmod(jobDirectory, 0o700);
     const schemaPath = path.join(jobDirectory, 'output-schema.json');
@@ -129,8 +135,12 @@ export class GenerationJobRunner {
         percent: 15,
       });
 
+      throwIfAborted(signal);
+      const command = await this.#commandResolver();
+      throwIfAborted(signal);
+
       const processResult = await runCapturedProcess({
-        command: this.#command,
+        command,
         args: [
           ...this.#commandArgsPrefix,
           'exec',
@@ -148,8 +158,9 @@ export class GenerationJobRunner {
           schemaPath,
           '--output-last-message',
           resultPath,
-          prompt,
+          '-',
         ],
+        stdin: prompt,
         cwd: jobDirectory,
         timeoutMs: this.#timeoutMs,
         signal,
@@ -190,7 +201,7 @@ export class GenerationJobRunner {
         jobDirectory,
         parsedResult.imagePath,
       );
-      await validateDecodedImage(imagePath, this.#inspectImage);
+      await validateDecodedImage(imagePath, request.display, this.#inspectImage);
       reportProgress(onProgress, {
         phase: 'validating',
         message: 'Wallpaper passed the safety and file checks.',
@@ -230,6 +241,33 @@ export class GenerationJobRunner {
       );
     }
     await rm(jobDirectory, { recursive: true, force: true });
+  }
+
+  async #prepareJobRoot(): Promise<void> {
+    this.#jobRootPreparation ??= this.#initializeJobRoot();
+    await this.#jobRootPreparation;
+  }
+
+  async #initializeJobRoot(): Promise<void> {
+    await mkdir(this.#jobRoot, { recursive: true, mode: 0o700 });
+    const entries = await readdir(this.#jobRoot, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('job-'))
+        .map((entry) =>
+          rm(path.join(this.#jobRoot, entry.name), { recursive: true, force: true }),
+        ),
+    );
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new GenerationJobError(
+      'cancelled',
+      'Wallpaper generation was cancelled.',
+      true,
+    );
   }
 }
 
@@ -303,6 +341,7 @@ function progressForCodexEvent(line: string): GenerationProgress | null {
 
 async function validateDecodedImage(
   imagePath: string,
+  requestedDimensions: GenerationRequest['display'],
   inspectImage: GenerationJobRunnerOptions['inspectImage'],
 ): Promise<void> {
   const dimensions = await inspectImage(imagePath).catch(() => null);
@@ -318,6 +357,17 @@ async function validateDecodedImage(
     throw new GenerationJobError(
       'missing-image',
       'Codex returned an image that Infinite Wall could not decode safely.',
+      false,
+    );
+  }
+
+  const requestedRatio = requestedDimensions.width / requestedDimensions.height;
+  const actualRatio = dimensions.width / dimensions.height;
+  const relativeDifference = Math.abs(actualRatio - requestedRatio) / requestedRatio;
+  if (relativeDifference > MAX_ASPECT_RATIO_DIFFERENCE) {
+    throw new GenerationJobError(
+      'missing-image',
+      'Codex returned an image with the wrong aspect ratio for this display.',
       false,
     );
   }

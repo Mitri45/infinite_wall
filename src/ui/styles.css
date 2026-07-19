@@ -954,19 +954,25 @@ h2 {
 }
 
 .progress-track {
+  display: block;
+  width: 100%;
   height: 5px;
   margin-top: 22px;
   overflow: hidden;
+  appearance: none;
+  border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 7%);
 }
 
-.progress-track span {
-  display: block;
-  height: 100%;
+.progress-track::-webkit-progress-bar {
+  border-radius: inherit;
+  background: rgb(255 255 255 / 7%);
+}
+
+.progress-track::-webkit-progress-value {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  transition: width 300ms ease;
 }
 
 .progress-message {

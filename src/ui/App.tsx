@@ -317,16 +317,12 @@ export function App() {
                 </div>
                 <span className="progress-percent">{progress.percent}%</span>
               </div>
-              <div
+              <progress
                 className="progress-track"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progress.percent}
+                max={100}
+                value={progress.percent}
                 aria-label="Wallpaper generation progress"
-              >
-                <span style={{ width: `${progress.percent}%` }} />
-              </div>
+              />
               <p className="progress-message" aria-live="polite">{progress.message}</p>
               <button
                 className="cancel-action"

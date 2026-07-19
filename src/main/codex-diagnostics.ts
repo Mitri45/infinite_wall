@@ -1,26 +1,30 @@
 import type { CodexDiagnostics } from '../shared/contracts';
+import { resolveCodexCommand } from './codex-command';
 import { runCapturedProcess } from './codex-process';
 
 interface CodexDiagnosticsOptions {
   readonly command?: string;
   readonly commandArgsPrefix?: readonly string[];
+  readonly commandResolver?: () => Promise<string>;
   readonly timeoutMs?: number;
 }
 
 export class CodexDiagnosticsService {
-  readonly #command: string;
   readonly #commandArgsPrefix: readonly string[];
+  readonly #commandResolver: () => Promise<string>;
   readonly #timeoutMs: number;
 
   constructor(options: CodexDiagnosticsOptions = {}) {
-    this.#command = options.command ?? 'codex';
     this.#commandArgsPrefix = options.commandArgsPrefix ?? [];
+    this.#commandResolver =
+      options.commandResolver ?? (() => resolveCodexCommand({ command: options.command }));
     this.#timeoutMs = options.timeoutMs ?? 5_000;
   }
 
   async check(): Promise<CodexDiagnostics> {
+    const command = await this.#commandResolver();
     const versionResult = await runCapturedProcess({
-      command: this.#command,
+      command,
       args: [...this.#commandArgsPrefix, '--version'],
       timeoutMs: this.#timeoutMs,
     });
@@ -53,7 +57,7 @@ export class CodexDiagnosticsService {
 
     const version = parseVersion(versionResult.stdout || versionResult.stderr);
     const loginResult = await runCapturedProcess({
-      command: this.#command,
+      command,
       args: [...this.#commandArgsPrefix, 'login', 'status'],
       timeoutMs: this.#timeoutMs,
     });

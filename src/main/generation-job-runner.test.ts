@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,6 +103,29 @@ describe('GenerationJobRunner', () => {
     });
   });
 
+  it('rejects a decoded image whose aspect ratio does not match the display', async () => {
+    const { runner } = await createRunner('success', 2_000, async () => ({
+      width: 1_000,
+      height: 1_000,
+    }));
+
+    await expect(runner.run(request)).rejects.toMatchObject({
+      code: 'missing-image',
+      message: expect.stringContaining('aspect ratio'),
+    });
+  });
+
+  it('prunes stale private job directories before the first run', async () => {
+    const { runner, root } = await createRunner('success');
+    const staleDirectory = path.join(root, 'job-stale');
+    await mkdir(staleDirectory);
+    await writeFile(path.join(staleDirectory, 'prompt.txt'), 'private prompt');
+
+    await runner.run(request);
+
+    expect(await readdir(root)).not.toContain('job-stale');
+  });
+
   it('supports explicit cancellation without leaving a successful job', async () => {
     const { runner } = await createRunner('timeout', 5_000);
     const controller = new AbortController();
@@ -110,6 +133,17 @@ describe('GenerationJobRunner', () => {
     setTimeout(() => controller.abort(), 30);
 
     await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+  });
+
+  it('honors cancellation before creating a workspace or spawning Codex', async () => {
+    const { runner, root } = await createRunner('success');
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(runner.run(request, controller.signal)).rejects.toMatchObject({
+      code: 'cancelled',
+    });
+    await expect(readdir(root)).resolves.toEqual([]);
   });
 });
 

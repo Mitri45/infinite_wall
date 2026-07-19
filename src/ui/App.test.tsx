@@ -154,6 +154,11 @@ describe('theme selection experience', () => {
       });
     });
     expect(await screen.findByText('52%')).toBeTruthy();
+    const progress = screen.getByRole('progressbar', {
+      name: 'Wallpaper generation progress',
+    });
+    expect(progress.getAttribute('value')).toBe('52');
+    expect(progress.getAttribute('style')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Cancel generation' }));
     expect(cancelGeneration).toHaveBeenCalledOnce();

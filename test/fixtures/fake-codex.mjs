@@ -30,6 +30,20 @@ if (args[0] === '--version') {
 }
 
 async function runGenerationScenario(activeScenario, invocationArgs) {
+  let prompt = '';
+  for await (const chunk of process.stdin) {
+    prompt += chunk;
+  }
+  if (
+    invocationArgs.at(-1) !== '-' ||
+    prompt.length < 24 ||
+    invocationArgs.some((argument) => argument.includes('Create exactly one original'))
+  ) {
+    process.stderr.write('Generation prompt must be provided only through stdin\n');
+    process.exitCode = 2;
+    return;
+  }
+
   if (activeScenario === 'timeout') {
     setInterval(() => undefined, 1_000);
     return;

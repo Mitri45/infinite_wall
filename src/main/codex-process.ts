@@ -38,6 +38,7 @@ export interface CapturedProcessResult {
 export interface CapturedProcessOptions {
   readonly command: string;
   readonly args: readonly string[];
+  readonly stdin?: string;
   readonly cwd?: string;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
@@ -68,6 +69,19 @@ export function runCapturedProcess(
 ): Promise<CapturedProcessResult> {
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_OUTPUT_LIMIT;
 
+  if (options.signal?.aborted) {
+    return Promise.resolve({
+      exitCode: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+      aborted: true,
+      overflowed: false,
+      spawnError: null,
+    });
+  }
+
   return new Promise((resolve) => {
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -84,9 +98,16 @@ export function runCapturedProcess(
       cwd: options.cwd,
       env: createSanitizedEnvironment(),
       shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
+
+    if (child.stdin) {
+      child.stdin.on('error', () => {
+        // A child that exits early can close stdin before the prompt is flushed.
+      });
+      child.stdin.end(options.stdin, 'utf8');
+    }
 
     const stopChild = () => {
       if (child.exitCode !== null || child.signalCode !== null) {
@@ -123,12 +144,12 @@ export function runCapturedProcess(
       }
     };
 
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout!.on('data', (chunk: Buffer) => {
       if (appendChunk(stdoutChunks, chunk)) {
         emitStdoutLines(stdoutDecoder.write(chunk));
       }
     });
-    child.stderr.on('data', (chunk: Buffer) => appendChunk(stderrChunks, chunk));
+    child.stderr!.on('data', (chunk: Buffer) => appendChunk(stderrChunks, chunk));
 
     const timeout = setTimeout(() => {
       timedOut = true;

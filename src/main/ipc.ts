@@ -10,6 +10,8 @@ import {
 } from '../shared/contracts';
 import { IPC_CHANNELS } from '../shared/ipc';
 import { CodexDiagnosticsService } from './codex-diagnostics';
+import { resolveCodexCommand } from './codex-command';
+import { physicalDisplayDimensions } from './display-dimensions';
 import {
   GenerationJobError,
   GenerationJobRunner,
@@ -26,7 +28,8 @@ interface RegisterIpcHandlersOptions {
 }
 
 export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
-  const diagnostics = new CodexDiagnosticsService();
+  const commandResolver = () => resolveCodexCommand();
+  const diagnostics = new CodexDiagnosticsService({ commandResolver });
   const inspectImage = async (imagePath: string) => {
     const image = nativeImage.createFromPath(imagePath);
     if (image.isEmpty()) {
@@ -37,6 +40,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
   const runner = new GenerationJobRunner({
     jobRoot: options.jobRoot,
     inspectImage,
+    commandResolver,
   });
   const library = new WallpaperLibrary({
     root: options.libraryRoot,
@@ -49,8 +53,7 @@ export function registerIpcHandlers(options: RegisterIpcHandlersOptions): void {
 
   ipcMain.handle(IPC_CHANNELS.checkCodex, () => diagnostics.check());
   ipcMain.handle(IPC_CHANNELS.getPrimaryDisplay, () => {
-    const { width, height } = screen.getPrimaryDisplay().size;
-    return { width, height };
+    return physicalDisplayDimensions(screen.getPrimaryDisplay());
   });
   ipcMain.handle(
     IPC_CHANNELS.generateWallpaper,
