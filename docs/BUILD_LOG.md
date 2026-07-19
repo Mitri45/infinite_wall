@@ -70,3 +70,24 @@ owner. Codex authored the initial project scaffold and verification setup.
   initialization failures retryable without restarting the app.
 - Expanded platform, diagnostics, lifecycle, renderer, and filesystem
   regression coverage without invoking live generation.
+
+## 2026-07-19 — Wallpaper application and local history
+
+- Added a main-process `WallpaperAdapter` boundary with Linux Cinnamon/GNOME
+  support and fixture-tested macOS and Windows commands.
+- Kept wallpaper paths out of renderer IPC and passed them to fixed operating
+  system commands only as separate arguments.
+- Added local-library listing, atomic favorite/applied metadata updates,
+  confined rejection/removal, and protection for the currently applied image.
+- Added preview apply/reject actions and a responsive local history with
+  preview, apply, favorite, and removal controls.
+- Expanded adapter, filesystem, and renderer coverage to 84 tests without live
+  Codex calls or wallpaper changes.
+- Kept D-Bus, X11, Wayland, and runtime-directory capabilities scoped only to
+  Linux wallpaper commands rather than the Codex generation environment.
+- Serialized wallpaper mutations through operating-system application and
+  metadata persistence, and made shutdown wait for that queue to drain.
+- Hardened Windows failure propagation and allowed older GNOME installations
+  without the optional dark-wallpaper setting.
+- Derived history preview labels from persisted record provenance rather than
+  the currently selected generation direction.

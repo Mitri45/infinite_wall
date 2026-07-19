@@ -45,6 +45,7 @@ export interface CapturedProcessOptions {
   readonly signal?: AbortSignal;
   readonly maxOutputBytes?: number;
   readonly onStdoutLine?: (line: string) => void;
+  readonly environmentOverrides?: Readonly<NodeJS.ProcessEnv>;
 }
 
 export function createSanitizedEnvironment(
@@ -113,6 +114,13 @@ export function runCapturedProcess(
     let stdoutLineBuffer = '';
 
     const environment = createSanitizedEnvironment(process.env, options.command);
+    for (const [key, value] of Object.entries(
+      options.environmentOverrides ?? {},
+    )) {
+      if (value !== undefined) {
+        environment[key] = value;
+      }
+    }
     const shell = requiresShell(options.command)
       ? environment.COMSPEC ?? true
       : false;

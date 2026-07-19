@@ -4,12 +4,13 @@ Infinite Wall is a desktop wallpaper app that uses the user's installed Codex
 CLI and existing ChatGPT/Codex login to create original, varied wallpapers. It
 is being built for the OpenAI Build Week **Apps for Your Life** track.
 
-The first three product slices are implemented: 12 validated theme packs, a
+The first four product slices are implemented: 12 validated theme packs, a
 responsive direction library, Codex installation/login diagnostics, isolated
 generation with live progress and cancellation, atomic local-library import,
-and wallpaper preview. Applying wallpapers and browsing library history are the
-next milestone. The release target is Linux, with OS integrations kept modular
-for macOS and Windows.
+wallpaper preview, desktop application, and local library history. Linux
+Cinnamon and GNOME are supported directly; macOS and Windows integrations are
+implemented behind the same adapter contract and covered by command-fixture
+tests pending platform acceptance runs.
 
 ## Prerequisites
 
@@ -70,7 +71,15 @@ metadata and atomically renamed into the local library. Temporary Codex job
 files are then removed, and staging directories left by interrupted application
 sessions are pruned before the next import. The renderer previews imported
 images through a record-ID-only custom protocol; absolute local paths are never
-exposed through the preload API.
+exposed through the preload API. Favorite and applied state use atomic metadata
+replacement, rejected items are removed only after direct-child confinement
+checks, and the currently applied item is protected from deletion.
+
+Wallpaper application is owned by the main process. Cinnamon and GNOME use
+`gsettings`, macOS uses a fixed AppleScript, and Windows uses a fixed PowerShell
+script. Image paths are supplied as separate process arguments rather than
+interpolated into executable command text. The renderer can request operations
+only by validated library record ID.
 
 Generated images, prompts, settings, and history stay local. Infinite Wall does
 not add analytics, telemetry, a third-party cloud backend, or a direct API-key

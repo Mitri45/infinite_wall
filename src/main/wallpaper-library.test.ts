@@ -126,6 +126,85 @@ describe('WallpaperLibrary', () => {
 
     await expect(library.resolveImage('linked-record')).resolves.toBeNull();
   });
+
+  it('lists records and atomically updates favorite and applied state', async () => {
+    const { library, generation } = await createLibrary();
+    const first = await library.importGeneration(generation);
+    const second = await library.importGeneration({
+      ...generation,
+      title: 'Second Geometry',
+      sceneSummary: 'A second restrained landscape with a different central form.',
+    });
+
+    await expect(library.setFavorite(first.record.id, true)).resolves.toMatchObject({
+      id: first.record.id,
+      favorite: true,
+    });
+    await library.markApplied(first.record.id);
+    await library.markApplied(second.record.id);
+
+    const items = await library.list();
+    expect(items).toHaveLength(2);
+    expect(items.find((item) => item.record.id === first.record.id)?.record).toMatchObject({
+      favorite: true,
+      applied: false,
+    });
+    expect(items.find((item) => item.record.id === second.record.id)?.record.applied).toBe(
+      true,
+    );
+    expect(items.every((item) => !('durationMs' in item))).toBe(true);
+  });
+
+  it('removes rejected records but preserves the currently applied wallpaper', async () => {
+    const { library, generation } = await createLibrary();
+    const rejected = await library.importGeneration(generation);
+    await expect(library.delete(rejected.record.id)).resolves.toBe(true);
+    await expect(library.resolveImage(rejected.record.id)).resolves.toBeNull();
+
+    const applied = await library.importGeneration(generation);
+    await library.markApplied(applied.record.id);
+    await expect(library.delete(applied.record.id)).rejects.toThrow(
+      'Apply another wallpaper',
+    );
+    await expect(library.resolveImage(applied.record.id)).resolves.not.toBeNull();
+  });
+
+  it('refuses to mutate or delete a symlinked record outside the library', async () => {
+    const { library, root, generation } = await createLibrary();
+    await library.importGeneration(generation);
+    const outside = path.join(root, 'outside-mutation');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'wallpaper.png'), fakePngBytes);
+    await writeFile(
+      path.join(outside, 'record.json'),
+      JSON.stringify({
+        id: 'linked-mutation',
+        filename: 'wallpaper.png',
+        prompt: generation.finalPrompt,
+        title: generation.title,
+        themeId: generation.themeId,
+        sceneSummary: generation.sceneSummary,
+        width: 1920,
+        height: 1080,
+        createdAt: '2026-07-19T00:00:00.000Z',
+        applied: false,
+        favorite: false,
+      }),
+    );
+    await symlink(
+      outside,
+      path.join(root, 'library', 'items', 'linked-mutation'),
+      'dir',
+    );
+
+    await expect(library.setFavorite('linked-mutation', true)).rejects.toThrow(
+      'could not be found',
+    );
+    await expect(library.delete('linked-mutation')).resolves.toBe(false);
+    expect(JSON.parse(await readFile(path.join(outside, 'record.json'), 'utf8'))).toMatchObject({
+      favorite: false,
+    });
+  });
 });
 
 async function createLibrary() {

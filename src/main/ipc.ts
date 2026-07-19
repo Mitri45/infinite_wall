@@ -4,9 +4,12 @@ import path from 'node:path';
 
 import {
   generationRequestSchema,
+  identifierSchema,
   type GenerationProgress,
   type OperationResult,
+  type WallpaperLibraryItem,
   type WallpaperPreview,
+  type WallpaperRecord,
 } from '../shared/contracts';
 import { IPC_CHANNELS } from '../shared/ipc';
 import { CodexDiagnosticsService } from './codex-diagnostics';
@@ -22,6 +25,11 @@ import {
   WallpaperLibrary,
   WallpaperLibraryError,
 } from './wallpaper-library';
+import {
+  createWallpaperAdapter,
+  WallpaperAdapterError,
+} from './wallpaper-adapter';
+import { WallpaperService } from './wallpaper-service';
 
 interface RegisterIpcHandlersOptions {
   readonly jobRoot: string;
@@ -51,6 +59,10 @@ export function registerIpcHandlers(
   });
   const generationService = new GenerationService({ runner, library });
   const generationSessions = new GenerationSessionController();
+  const wallpaperService = new WallpaperService({
+    library,
+    adapter: createWallpaperAdapter(),
+  });
 
   registerMediaProtocol(library);
 
@@ -133,10 +145,124 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.cancelGeneration, () => {
     return generationSessions.cancel();
   });
+  ipcMain.handle(
+    IPC_CHANNELS.listWallpapers,
+    async (): Promise<OperationResult<WallpaperLibraryItem[]>> => {
+      try {
+        return { ok: true, value: await wallpaperService.list() };
+      } catch {
+        return libraryOperationFailure(
+          'The local wallpaper library could not be loaded.',
+        );
+      }
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.applyWallpaper,
+    async (_event, rawRecordId): Promise<OperationResult<WallpaperRecord>> => {
+      const recordId = identifierSchema.safeParse(rawRecordId);
+      if (!recordId.success) {
+        return invalidLibraryRequest();
+      }
+      try {
+        return { ok: true, value: await wallpaperService.apply(recordId.data) };
+      } catch (error) {
+        if (error instanceof WallpaperAdapterError) {
+          return {
+            ok: false,
+            error: {
+              code: 'wallpaper-apply',
+              message: error.message,
+              retryable: true,
+            },
+          };
+        }
+        if (error instanceof WallpaperLibraryError) {
+          return libraryOperationFailure(error.message);
+        }
+        return {
+          ok: false,
+          error: {
+            code: 'wallpaper-apply',
+            message: 'The wallpaper could not be applied.',
+            retryable: true,
+          },
+        };
+      }
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.deleteWallpaper,
+    async (_event, rawRecordId): Promise<OperationResult<boolean>> => {
+      const recordId = identifierSchema.safeParse(rawRecordId);
+      if (!recordId.success) {
+        return invalidLibraryRequest();
+      }
+      try {
+        return { ok: true, value: await wallpaperService.delete(recordId.data) };
+      } catch (error) {
+        return libraryOperationFailure(
+          error instanceof WallpaperLibraryError
+            ? error.message
+            : 'The wallpaper could not be removed.',
+        );
+      }
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.setWallpaperFavorite,
+    async (
+      _event,
+      rawRecordId,
+      rawFavorite,
+    ): Promise<OperationResult<WallpaperRecord>> => {
+      const recordId = identifierSchema.safeParse(rawRecordId);
+      if (!recordId.success || typeof rawFavorite !== 'boolean') {
+        return invalidLibraryRequest();
+      }
+      try {
+        return {
+          ok: true,
+          value: await wallpaperService.setFavorite(recordId.data, rawFavorite),
+        };
+      } catch (error) {
+        return libraryOperationFailure(
+          error instanceof WallpaperLibraryError
+            ? error.message
+            : 'The wallpaper could not be updated.',
+        );
+      }
+    },
+  );
 
   return async () => {
     generationSessions.dispose();
-    await generationSessions.waitForIdle();
+    await Promise.all([
+      generationSessions.waitForIdle(),
+      wallpaperService.dispose(),
+    ]);
+  };
+}
+
+function invalidLibraryRequest<T>(): OperationResult<T> {
+  return {
+    ok: false,
+    error: {
+      code: 'invalid-request',
+      message: 'The wallpaper request is invalid.',
+      retryable: false,
+    },
+  };
+}
+
+function libraryOperationFailure<T>(message: string): OperationResult<T> {
+  return {
+    ok: false,
+    error: {
+      code: 'library-operation',
+      message,
+      retryable: true,
+    },
   };
 }
 

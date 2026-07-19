@@ -7,7 +7,8 @@ import type {
   GenerationRequest,
   PublicAppError,
   ThemeId,
-  WallpaperPreview,
+  WallpaperLibraryItem,
+  WallpaperRecord,
 } from '../shared/contracts';
 import { getThemePack, THEME_PACKS } from '../shared/themes';
 import { CodexStatus } from './CodexStatus';
@@ -18,6 +19,10 @@ const INITIAL_PROGRESS: GenerationProgress = {
   phase: 'preparing',
   message: 'Preparing generation…',
   percent: 2,
+};
+
+type ActivePreview = WallpaperLibraryItem & {
+  readonly source: 'generated' | 'library';
 };
 
 export function App() {
@@ -36,7 +41,10 @@ export function App() {
   const [generating, setGenerating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<GenerationProgress>(INITIAL_PROGRESS);
-  const [preview, setPreview] = useState<WallpaperPreview | null>(null);
+  const [preview, setPreview] = useState<ActivePreview | null>(null);
+  const [wallpapers, setWallpapers] = useState<WallpaperLibraryItem[]>([]);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [activeWallpaperId, setActiveWallpaperId] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<PublicAppError | null>(
     null,
   );
@@ -88,6 +96,27 @@ export function App() {
     return window.infiniteWall.onGenerationProgress(setProgress);
   }, []);
 
+  const refreshLibrary = useCallback(async () => {
+    if (!window.infiniteWall?.listWallpapers) {
+      return;
+    }
+    try {
+      const result = await window.infiniteWall.listWallpapers();
+      if (result.ok) {
+        setWallpapers(result.value);
+        setLibraryError(null);
+      } else {
+        setLibraryError(result.error.message);
+      }
+    } catch {
+      setLibraryError('The local wallpaper library could not be loaded.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
   const buildRequest = useCallback(
     async (): Promise<GenerationRequest> => {
       const display = await window.infiniteWall.getPrimaryDisplay();
@@ -131,7 +160,8 @@ export function App() {
         await buildRequest(),
       );
       if (result.ok) {
-        setPreview(result.value);
+        setPreview({ ...result.value, source: 'generated' });
+        await refreshLibrary();
       } else {
         setGenerationError(result.error);
       }
@@ -145,7 +175,98 @@ export function App() {
       setGenerating(false);
       setCancelling(false);
     }
-  }, [buildRequest, codexDiagnostics?.authenticated]);
+  }, [buildRequest, codexDiagnostics?.authenticated, refreshLibrary]);
+
+  const replaceRecord = useCallback((record: WallpaperRecord) => {
+    setWallpapers((items) =>
+      items.map((item) => ({
+        ...item,
+        record:
+          item.record.id === record.id
+            ? record
+            : record.applied
+              ? { ...item.record, applied: false }
+              : item.record,
+      })),
+    );
+    setPreview((item) => {
+      if (!item) {
+        return item;
+      }
+      if (item.record.id === record.id) {
+        return { ...item, record };
+      }
+      return record.applied
+        ? { ...item, record: { ...item.record, applied: false } }
+        : item;
+    });
+  }, []);
+
+  const handleApply = useCallback(
+    async (recordId: string) => {
+      if (!window.infiniteWall?.applyWallpaper) {
+        return;
+      }
+      setActiveWallpaperId(recordId);
+      setLibraryError(null);
+      try {
+        const result = await window.infiniteWall.applyWallpaper(recordId);
+        if (result.ok) {
+          replaceRecord(result.value);
+        } else {
+          setLibraryError(result.error.message);
+        }
+      } catch {
+        setLibraryError('The wallpaper could not be applied.');
+      } finally {
+        setActiveWallpaperId(null);
+      }
+    },
+    [replaceRecord],
+  );
+
+  const handleFavorite = useCallback(
+    async (record: WallpaperRecord) => {
+      setActiveWallpaperId(record.id);
+      setLibraryError(null);
+      try {
+        const result = await window.infiniteWall.setWallpaperFavorite(
+          record.id,
+          !record.favorite,
+        );
+        if (result.ok) {
+          replaceRecord(result.value);
+        } else {
+          setLibraryError(result.error.message);
+        }
+      } catch {
+        setLibraryError('The wallpaper could not be updated.');
+      } finally {
+        setActiveWallpaperId(null);
+      }
+    },
+    [replaceRecord],
+  );
+
+  const handleDelete = useCallback(async (recordId: string) => {
+    setActiveWallpaperId(recordId);
+    setLibraryError(null);
+    try {
+      const result = await window.infiniteWall.deleteWallpaper(recordId);
+      if (result.ok && result.value) {
+        setWallpapers((items) =>
+          items.filter((item) => item.record.id !== recordId),
+        );
+        setPreview((item) => (item?.record.id === recordId ? null : item));
+      } else if (!result.ok) {
+        setLibraryError(result.error.message);
+      }
+    } catch {
+      setLibraryError('The wallpaper could not be removed.');
+    } finally {
+      setActiveWallpaperId(null);
+    }
+  }, []);
 
   const handleCancel = async () => {
     setCancelling(true);
@@ -269,7 +390,11 @@ export function App() {
 
           <div className="direction-copy">
             <p className="collection-label">
-              {preview ? 'New wallpaper' : selectedTheme.collection}
+              {preview
+                ? preview.source === 'generated'
+                  ? 'New wallpaper'
+                  : 'Library wallpaper'
+                : selectedTheme.collection}
             </p>
             <div className="direction-title-row">
               <h2 id="direction-title">
@@ -288,7 +413,8 @@ export function App() {
             </p>
             {preview ? (
               <p className="preview-metadata">
-                {preview.record.width} × {preview.record.height} · {selectionLabel}
+                {preview.record.width} × {preview.record.height} ·{' '}
+                {getThemePack(preview.record.themeId).name}
               </p>
             ) : (
               <div className="mood-list" aria-label="Theme mood">
@@ -301,14 +427,32 @@ export function App() {
 
           {preview ? (
             <div className="preview-actions">
-              <button className="primary-action" type="button" onClick={() => void handleGenerate()}>
-                Generate another
-                <span aria-hidden="true">↻</span>
+              <button
+                className="primary-action"
+                type="button"
+                disabled={preview.record.applied || activeWallpaperId === preview.record.id}
+                onClick={() => void handleApply(preview.record.id)}
+              >
+                {preview.record.applied
+                  ? 'Applied to desktop'
+                  : activeWallpaperId === preview.record.id
+                    ? 'Applying…'
+                    : 'Apply wallpaper'}
+                <span aria-hidden="true">→</span>
               </button>
-              <button className="secondary-action" type="button" onClick={() => setPreview(null)}>
-                Choose another direction
+              <button
+                className="secondary-action danger-action"
+                type="button"
+                disabled={preview.record.applied || activeWallpaperId === preview.record.id}
+                onClick={() => void handleDelete(preview.record.id)}
+              >
+                Reject and remove
               </button>
-              <p className="action-note">This wallpaper is already stored in your private local library.</p>
+              <button className="text-action" type="button" onClick={() => setPreview(null)}>
+                Back to directions
+              </button>
+              {libraryError && <p className="library-error" role="alert">{libraryError}</p>}
+              <p className="action-note">Stored only in your private local library until you remove it.</p>
             </div>
           ) : generating ? (
             <section className="generation-progress" aria-labelledby="generation-progress-title">
@@ -385,6 +529,79 @@ export function App() {
             </>
           )}
         </aside>
+
+        <section className="wallpaper-history" aria-labelledby="history-title">
+          <div className="history-heading">
+            <div>
+              <p className="eyebrow">Private on this computer</p>
+              <h2 id="history-title">Local wallpaper library</h2>
+            </div>
+            <p>{wallpapers.length} {wallpapers.length === 1 ? 'wallpaper' : 'wallpapers'}</p>
+          </div>
+
+          {libraryError && !preview && (
+            <p className="library-error" role="alert">{libraryError}</p>
+          )}
+
+          {wallpapers.length === 0 ? (
+            <div className="history-empty">
+              <p>Your generated wallpapers will appear here.</p>
+              <span>Images and prompts stay in the app’s local library.</span>
+            </div>
+          ) : (
+            <div className="history-grid">
+              {wallpapers.map((item) => {
+                const busy = activeWallpaperId === item.record.id;
+                return (
+                  <article className="history-card" key={item.record.id}>
+                    <button
+                      className="history-preview"
+                      type="button"
+                      onClick={() => setPreview({ ...item, source: 'library' })}
+                      aria-label={`Preview ${item.record.title}`}
+                    >
+                      <img src={item.previewUrl} alt="" />
+                      {item.record.applied && <span>Current wallpaper</span>}
+                    </button>
+                    <div className="history-card-copy">
+                      <div>
+                        <h3>{item.record.title}</h3>
+                        <p>{item.record.width} × {item.record.height} · {getThemePack(item.record.themeId).name}</p>
+                      </div>
+                      <button
+                        className="favorite-action"
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${item.record.favorite ? 'Remove' : 'Add'} ${item.record.title} ${item.record.favorite ? 'from' : 'to'} favorites`}
+                        aria-pressed={item.record.favorite}
+                        onClick={() => void handleFavorite(item.record)}
+                      >
+                        {item.record.favorite ? '★' : '☆'}
+                      </button>
+                    </div>
+                    <div className="history-actions">
+                      <button
+                        type="button"
+                        disabled={busy || item.record.applied}
+                        onClick={() => void handleApply(item.record.id)}
+                      >
+                        {item.record.applied ? 'Applied' : busy ? 'Working…' : 'Apply'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || item.record.applied}
+                        onClick={() => void handleDelete(item.record.id)}
+                        aria-label={`Remove ${item.record.title}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

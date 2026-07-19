@@ -912,6 +912,37 @@ h2 {
   border-color: color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
+.secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.danger-action:hover:not(:disabled) {
+  color: #efad9e;
+  border-color: rgb(226 118 93 / 35%);
+}
+
+.text-action {
+  justify-self: center;
+  padding: 4px 8px;
+  border: 0;
+  color: #7f857f;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.62rem;
+}
+
+.text-action:hover {
+  color: #d8dcd5;
+}
+
+.library-error {
+  margin: 2px 0;
+  color: #d99b8d;
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
 .generation-progress {
   padding: 8px 28px 28px;
 }
@@ -1066,6 +1097,165 @@ h2 {
   text-align: center;
 }
 
+.wallpaper-history {
+  grid-column: 1 / -1;
+  padding-top: 26px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.history-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.history-heading .eyebrow {
+  margin-bottom: 8px;
+}
+
+.history-heading h2 {
+  margin: 0;
+  color: #ecece6;
+  font-size: clamp(1.35rem, 2.5vw, 1.9rem);
+  letter-spacing: -0.035em;
+}
+
+.history-heading > p {
+  margin: 0;
+  color: #727772;
+  font-size: 0.68rem;
+}
+
+.history-empty {
+  padding: 28px;
+  border: 1px dashed rgb(255 255 255 / 10%);
+  border-radius: 16px;
+  color: #999e99;
+  background: rgb(255 255 255 / 1.5%);
+  text-align: center;
+}
+
+.history-empty p {
+  margin: 0 0 6px;
+  color: #c9ccc6;
+  font-size: 0.78rem;
+}
+
+.history-empty span {
+  font-size: 0.62rem;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.history-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.history-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 132px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: #080a09;
+  cursor: pointer;
+}
+
+.history-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 220ms ease;
+}
+
+.history-preview:hover img {
+  transform: scale(1.025);
+}
+
+.history-preview span {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #cde9d8;
+  background: rgb(10 17 13 / 78%);
+  font-size: 0.52rem;
+}
+
+.history-card-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 14px 14px 10px;
+}
+
+.history-card h3 {
+  margin: 0 0 5px;
+  overflow: hidden;
+  color: #dedfd9;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-card-copy p {
+  margin: 0;
+  color: #686e69;
+  font-size: 0.56rem;
+}
+
+.favorite-action {
+  padding: 0;
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.history-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 0 14px 14px;
+}
+
+.history-actions button {
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
+  color: #aeb3ae;
+  background: rgb(255 255 255 / 2%);
+  cursor: pointer;
+  font-size: 0.58rem;
+}
+
+.history-actions button:hover:not(:disabled) {
+  color: #e9ebe4;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.history-actions button:disabled,
+.favorite-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 @media (max-width: 1280px) {
   .theme-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1078,6 +1268,10 @@ h2 {
 
   .section-intro {
     max-width: 560px;
+  }
+
+  .history-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1094,6 +1288,10 @@ h2 {
 
   .theme-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .history-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1131,6 +1329,10 @@ h2 {
 
   .theme-card-art {
     height: 92px;
+  }
+
+  .history-grid {
+    grid-template-columns: 1fr;
   }
 }
 

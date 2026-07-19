@@ -49,6 +49,20 @@ describe('runCapturedProcess', () => {
     );
   });
 
+  it('keeps desktop-session capabilities out of the default child environment', () => {
+    const environment = createSanitizedEnvironment({
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      DISPLAY: ':0',
+      WAYLAND_DISPLAY: 'wayland-0',
+      XDG_RUNTIME_DIR: '/run/user/1000',
+    });
+
+    expect(environment).not.toHaveProperty('DBUS_SESSION_BUS_ADDRESS');
+    expect(environment).not.toHaveProperty('DISPLAY');
+    expect(environment).not.toHaveProperty('WAYLAND_DISPLAY');
+    expect(environment).not.toHaveProperty('XDG_RUNTIME_DIR');
+  });
+
   it('runs an env-node launcher found outside the desktop PATH', async () => {
     const binDirectory = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-bin-'));
     temporaryRoots.push(binDirectory);
