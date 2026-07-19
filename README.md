@@ -56,8 +56,8 @@ settings. Theme content is validated at module load, and each curated pack
 contains at least four original SFW scenes.
 
 The generation runner invokes the user's local Codex CLI with an ephemeral
-session, pinned model, `workspace-write` sandbox, strict output schema, capped
-process output, and a private per-job directory under Electron's local
+session, pinned `gpt-5.6-sol` model, `workspace-write` sandbox, strict output
+schema, capped process output, and a private per-job directory under Electron's local
 `userData` directory. It accepts only one schema-valid, decodable image confined
 to that directory, verifies that its file signature and aspect ratio match the
 request, and maps Codex JSONL event types to sanitized progress phases without

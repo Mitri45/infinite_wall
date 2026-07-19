@@ -105,3 +105,19 @@ owner. Codex authored the initial project scaffold and verification setup.
 - Added a responsive settings panel and typed, runtime-validated preload IPC.
 - Expanded deterministic coverage to 90 tests without changing the desktop or
   invoking live Codex generation.
+
+## 2026-07-19 — First live Linux acceptance run
+
+- Verified Codex CLI 0.144.6 with the existing ChatGPT-managed login and found
+  that the generic `gpt-5.6` alias is rejected while `gpt-5.6-sol` succeeds.
+- Updated and regression-tested the runtime pin to the concrete
+  ChatGPT-compatible GPT-5.6 SOL model.
+- Generated and atomically imported an original 3440x1440 Minimal wallpaper,
+  visually inspected the decoded image, previewed it in the app, and applied it
+  successfully through Cinnamon.
+- Cancelled a second live generation and verified that it imported no library
+  item and left no private job directory behind.
+- Disabled renderer HMR to avoid Vite's React preamble startup race, keeping
+  scripts strict in both development and production with focused policy tests.
+- Restarted the app and confirmed the generated library record and applied
+  state persisted.

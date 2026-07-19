@@ -15,6 +15,7 @@ import {
   registerIpcHandlers,
   type InfiniteWallRuntime,
 } from './main/ipc';
+import { buildContentSecurityPolicy } from './main/content-security-policy';
 import { CODEX_SETUP_URL } from './shared/app-info';
 import { IPC_CHANNELS } from './shared/ipc';
 import { THEME_IDS, type AppSettings } from './shared/contracts';
@@ -38,17 +39,7 @@ protocol.registerSchemesAsPrivileged([
 
 const registerContentSecurityPolicy = (): void => {
   const development = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  const policy = [
-    "default-src 'self'",
-    "script-src 'self'",
-    `style-src 'self'${development ? " 'unsafe-inline'" : ''}`,
-    "img-src 'self' data: blob: infinite-wall-media:",
-    "font-src 'self' data:",
-    `connect-src 'self'${development ? ' http://localhost:* ws://localhost:*' : ''}`,
-    "object-src 'none'",
-    "base-uri 'none'",
-    "frame-ancestors 'none'",
-  ].join('; ');
+  const policy = buildContentSecurityPolicy(development);
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({

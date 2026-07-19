@@ -57,6 +57,15 @@ async function runGenerationScenario(activeScenario, invocationArgs) {
     return;
   }
 
+  if (
+    activeScenario === 'assert-default-model' &&
+    flagValue(invocationArgs, '--model') !== 'gpt-5.6-sol'
+  ) {
+    process.stderr.write('Unexpected default generation model\n');
+    process.exitCode = 2;
+    return;
+  }
+
   if (activeScenario === 'timeout') {
     setInterval(() => undefined, 1_000);
     return;

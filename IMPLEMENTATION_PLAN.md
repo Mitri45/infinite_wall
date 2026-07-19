@@ -27,7 +27,7 @@ Target the **Apps for Your Life** track. Ship a tested Linux `.deb` and portable
 - Each request creates an isolated job directory and invokes:
 
   ```text
-  codex exec --ephemeral --model gpt-5.6 --sandbox workspace-write \
+  codex exec --ephemeral --model gpt-5.6-sol --sandbox workspace-write \
     --skip-git-repo-check --json --output-schema <schema> <prompt>
   ```
 
@@ -55,7 +55,7 @@ Target the **Apps for Your Life** track. Ship a tested Linux `.deb` and portable
 
 ### Live Linux acceptance
 
-- Detect the current Codex login and pinned GPT-5.6 model.
+- Detect the current Codex login and pinned GPT-5.6 SOL model.
 - Generate distinct wallpapers from the same theme twice.
 - Apply a generated wallpaper on Cinnamon.
 - Complete a scheduled generation.
@@ -74,7 +74,9 @@ Target the **Apps for Your Life** track. Ship a tested Linux `.deb` and portable
 ## Assumptions and fixed decisions
 
 - Working name: **Infinite Wall**. The name has received only a practical collision check, not trademark clearance.
-- GPT-5.6 is pinned through the documented `gpt-5.6` alias, currently routing to `gpt-5.6-sol`.
+- GPT-5.6 is pinned to the ChatGPT-compatible `gpt-5.6-sol` model. The generic
+  `gpt-5.6` alias is not used because Codex CLI rejects it for ChatGPT-managed
+  authentication.
 - Codex CLI is external and uses the user's existing ChatGPT-managed authentication.
 - Linux is the judged release platform. macOS and Windows remain implemented behind adapters and CI-tested but are not claimed as manually validated releases.
 - The production app uses OpenAI through Codex CLI only. It has no direct API-key fallback and no non-OpenAI generation backend.
