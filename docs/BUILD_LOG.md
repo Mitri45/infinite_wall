@@ -138,3 +138,23 @@ owner. Codex authored the initial project scaffold and verification setup.
   included the mutation tail in clean shutdown.
 - Expanded deterministic coverage to 101 tests and rebuilt the Linux production
   package successfully.
+
+## 2026-07-19 — Packaged Linux acceptance
+
+- Built the Linux x64 `.deb` and portable ZIP with Electron Forge, inspected
+  the Debian package metadata, and validated the packaged desktop entry.
+- Ran the exact application payload from the `.deb` against an isolated XDG
+  profile and confirmed Codex 0.144.6 with ChatGPT-managed authentication was
+  detected from the packaged app.
+- Completed a live packaged generation, decoded and visually inspected the
+  original 3440x1440 result, and confirmed its atomic import into the isolated
+  local library.
+- Launched a second packaged process against the same profile and confirmed the
+  single-instance guard exited it without creating another app runtime.
+- Enabled and disabled launch-at-login from the packaged UI, verifying creation
+  and removal of the private Linux XDG autostart entry.
+- Restarted the packaged payload with persisted application data and confirmed
+  the generated history, configured quality, and schedule were restored.
+- Kept package-manager installation and the full one-hour scheduled generation
+  as explicit remaining acceptance steps; the current host session cannot run
+  `dpkg` as root non-interactively.
