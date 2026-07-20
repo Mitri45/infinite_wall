@@ -54,14 +54,14 @@ desktop user.
 Debian, Ubuntu, Linux Mint, and related distributions:
 
 ```bash
-sudo apt install ./infinite-wall_0.1.0_amd64.deb
+sudo apt install ./infinite-wall_0.1.1_amd64.deb
 infinite-wall
 ```
 
 Portable archive:
 
 ```bash
-unzip 'Infinite Wall-linux-x64-0.1.0.zip'
+unzip 'Infinite Wall-linux-x64-0.1.1.zip'
 cd 'Infinite Wall-linux-x64'
 ./infinite-wall
 ```
