@@ -68,6 +68,61 @@ describe('ScheduleController', () => {
     expect(onStatusChange).toHaveBeenLastCalledWith(scheduler.getStatus());
   });
 
+  it('tracks run-now work without moving the automatic deadline', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T01:00:00.000Z'));
+    let finishRun!: () => void;
+    const run = vi.fn(() => new Promise<void>((resolve) => { finishRun = resolve; }));
+    const onStatusChange = vi.fn();
+    const scheduler = new ScheduleController({
+      run,
+      onFailure: vi.fn(),
+      onStatusChange,
+    });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: 3 }));
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    const operation = scheduler.runNow();
+    expect(scheduler.getStatus()).toEqual({
+      state: 'running', intervalHours: 3, nextRunAt: null,
+    });
+    await expect(scheduler.runNow()).rejects.toThrow(
+      'Schedule generation is already active.',
+    );
+
+    finishRun();
+    await operation;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scheduler.getStatus()).toEqual({
+      state: 'active',
+      intervalHours: 3,
+      nextRunAt: '2026-07-20T04:00:00.000Z',
+    });
+    expect(onStatusChange).toHaveBeenLastCalledWith(scheduler.getStatus());
+  });
+
+  it('reports run-now work in manual mode', async () => {
+    let finishRun!: () => void;
+    const scheduler = new ScheduleController({
+      run: () => new Promise<void>((resolve) => { finishRun = resolve; }),
+      onFailure: vi.fn(),
+    });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: null }));
+
+    const operation = scheduler.runNow();
+    expect(scheduler.getStatus()).toEqual({
+      state: 'running', intervalHours: null, nextRunAt: null,
+    });
+
+    await Promise.resolve();
+    finishRun();
+    await operation;
+    await Promise.resolve();
+    expect(scheduler.getStatus()).toEqual({
+      state: 'manual', intervalHours: null, nextRunAt: null,
+    });
+  });
+
   it('waits until the next interval after a scheduled failure', async () => {
     vi.useFakeTimers();
     const run = vi.fn(async () => { throw new Error('offline'); });
@@ -144,5 +199,23 @@ describe('ScheduleController', () => {
     finishRun();
     await disposal;
     expect(disposed).toBe(true);
+  });
+
+  it('absorbs a scheduled failure while disposal waits for cleanup', async () => {
+    vi.useFakeTimers();
+    let rejectRun!: (error: Error) => void;
+    const run = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectRun = reject;
+    }));
+    const onFailure = vi.fn();
+    const scheduler = new ScheduleController({ run, onFailure });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: 1 }));
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+    const disposal = scheduler.dispose();
+    rejectRun(new Error('offline'));
+
+    await expect(disposal).resolves.toBeUndefined();
+    expect(onFailure).toHaveBeenCalledOnce();
   });
 });

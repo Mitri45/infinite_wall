@@ -92,7 +92,7 @@ export function registerIpcHandlers(
   let runtimeDisposing = false;
   let scheduledRunActive = false;
   let scheduledRunTail: Promise<void> = Promise.resolve();
-  const runScheduledGeneration = (): Promise<void> => {
+  const performScheduledGeneration = (): Promise<void> => {
     if (runtimeDisposing || scheduledRunActive || generationSessions.busy) {
       return Promise.reject(new Error('Generation is already active.'));
     }
@@ -132,10 +132,11 @@ export function registerIpcHandlers(
     return operation;
   };
   const scheduler = new ScheduleController({
-    run: runScheduledGeneration,
+    run: performScheduledGeneration,
     onFailure: (message) => options.notify('Infinite Wall schedule', message),
     onStatusChange: options.onScheduleStatusChanged,
   });
+  const runScheduledGeneration = (): Promise<void> => scheduler.runNow();
   const settingsReady = settingsStore.load().then(async (settings) => {
     scheduler.configure(settings);
     options.onSettingsChanged?.(settings);

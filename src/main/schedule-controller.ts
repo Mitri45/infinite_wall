@@ -48,14 +48,14 @@ export class ScheduleController {
 
   getStatus(): ScheduleStatus {
     const intervalHours = this.#settings?.scheduleHours ?? null;
+    if (this.#activeRun) {
+      return { state: 'running', intervalHours, nextRunAt: null };
+    }
     if (!intervalHours) {
       return { state: 'manual', intervalHours: null, nextRunAt: null };
     }
     if (this.#settings?.schedulePaused) {
       return { state: 'paused', intervalHours, nextRunAt: null };
-    }
-    if (this.#activeRun) {
-      return { state: 'running', intervalHours, nextRunAt: null };
     }
     return {
       state: 'active',
@@ -73,6 +73,18 @@ export class ScheduleController {
     await this.#activeRun;
   }
 
+  runNow(): Promise<void> {
+    if (this.#disposed) {
+      return Promise.reject(new Error('The schedule controller is disposed.'));
+    }
+    if (this.#activeRun) {
+      return Promise.reject(new Error('Schedule generation is already active.'));
+    }
+    const operation = Promise.resolve().then(this.#run);
+    this.#trackRun(operation);
+    return operation;
+  }
+
   #scheduleNext(revision = this.#revision): void {
     const hours = this.#settings?.scheduleHours;
     if (this.#disposed || this.#timer || !hours || this.#settings?.schedulePaused) {
@@ -83,23 +95,8 @@ export class ScheduleController {
     this.#timer = this.#setTimer(() => {
       this.#timer = null;
       this.#nextRunAt = null;
-      const activeRun = this.#run();
-      this.#activeRun = activeRun;
-      this.#publishStatus();
-      void activeRun
-        .catch(() => {
-          this.#onFailure(
-            'Scheduled wallpaper generation failed. Infinite Wall will try again at the next interval.',
-          );
-        })
-        .finally(() => {
-          if (this.#activeRun === activeRun) this.#activeRun = null;
-          if (revision === this.#revision) {
-            this.#scheduleNext(revision);
-          } else {
-            this.#publishStatus();
-          }
-        });
+      const operation = Promise.resolve().then(this.#run);
+      this.#trackRun(operation, revision);
     }, hours * 60 * 60 * 1000);
     this.#timer.unref?.();
     this.#publishStatus();
@@ -111,6 +108,27 @@ export class ScheduleController {
       this.#timer = null;
     }
     this.#nextRunAt = null;
+  }
+
+  #trackRun(operation: Promise<void>, scheduleRevision?: number): void {
+    const trackedRun = operation
+      .catch(() => {
+        if (scheduleRevision !== undefined) {
+          this.#onFailure(
+            'Scheduled wallpaper generation failed. Infinite Wall will try again at the next interval.',
+          );
+        }
+      })
+      .finally(() => {
+        if (this.#activeRun === trackedRun) this.#activeRun = null;
+        if (scheduleRevision === this.#revision) {
+          this.#scheduleNext(scheduleRevision);
+        } else {
+          this.#publishStatus();
+        }
+      });
+    this.#activeRun = trackedRun;
+    this.#publishStatus();
   }
 
   #publishStatus(): void {

@@ -290,7 +290,7 @@ export const scheduleStatusSchema = z.discriminatedUnion('state', [
   z
     .object({
       state: z.literal('running'),
-      intervalHours: scheduleHoursSchema,
+      intervalHours: scheduleHoursSchema.nullable(),
       nextRunAt: z.null(),
     })
     .strict(),
