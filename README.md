@@ -66,6 +66,24 @@ Infinite Wall stores generated images, prompts, settings, and history only in
 its local app data. Codex sends generation requests to OpenAI using your signed-in
 session; Infinite Wall adds no analytics, advertising, or separate cloud backend.
 
+## Built with Codex and GPT-5.6
+
+Infinite Wall was created in a new repository during OpenAI Build Week, with
+Codex as both a development collaborator and the application's runtime engine.
+Codex accelerated the Electron and TypeScript implementation, UI prototyping,
+test coverage, Linux packaging, and review-driven polish.
+
+The key product decisions remained human-directed: start from a clean project,
+combine curated visual worlds with custom prompts, use the signed-in Codex CLI
+instead of collecting API keys, keep the library local, and make scheduling
+opt-in. Those decisions were refined through hands-on testing of the packaged
+application.
+
+At runtime, Infinite Wall starts an isolated, ephemeral Codex session using
+GPT-5.6. Codex turns the selected visual direction into a final image prompt,
+generates one wallpaper, and returns structured metadata for local validation
+and storage.
+
 ## Run from source
 
 Source development additionally requires Node.js 22 or newer, pnpm 11.13.0,
