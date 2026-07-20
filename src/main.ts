@@ -24,6 +24,7 @@ import {
   THEME_IDS,
   type AppCommand,
   type AppSettings,
+  type ScheduleStatus,
 } from './shared/contracts';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -38,6 +39,7 @@ let shutdownReady = false;
 const appCommandQueue = new RendererEventQueue<AppCommand>();
 const libraryRefreshQueue = new RendererEventQueue<true>();
 const settingsChangedQueue = new RendererEventQueue<AppSettings>();
+const scheduleStatusChangedQueue = new RendererEventQueue<ScheduleStatus>();
 const appAssetPath = (filename: string): string => path.join(
   app.isPackaged ? process.resourcesPath : app.getAppPath(),
   'assets',
@@ -97,12 +99,14 @@ const createWindow = (): BrowserWindow => {
       appCommandQueue.markLoading();
       libraryRefreshQueue.markLoading();
       settingsChangedQueue.markLoading();
+      scheduleStatusChangedQueue.markLoading();
     }
   });
   window.webContents.on('did-start-loading', () => {
     appCommandQueue.markLoading();
     libraryRefreshQueue.markLoading();
     settingsChangedQueue.markLoading();
+    scheduleStatusChangedQueue.markLoading();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url === CODEX_SETUP_URL) {
@@ -157,6 +161,12 @@ const notifySettingsChanged = (settings: AppSettings): void => {
   });
 };
 
+const notifyScheduleStatusChanged = (status: ScheduleStatus): void => {
+  scheduleStatusChangedQueue.sendOrQueue(status, (pending) => {
+    sendToRenderer(IPC_CHANNELS.scheduleStatusChanged, pending);
+  });
+};
+
 const markRendererReady = (): void => {
   appCommandQueue.markReady((pending) => {
     sendToRenderer(IPC_CHANNELS.appCommand, pending);
@@ -166,6 +176,9 @@ const markRendererReady = (): void => {
   });
   settingsChangedQueue.markReady((pending) => {
     sendToRenderer(IPC_CHANNELS.settingsChanged, pending);
+  });
+  scheduleStatusChangedQueue.markReady((pending) => {
+    sendToRenderer(IPC_CHANNELS.scheduleStatusChanged, pending);
   });
 };
 
@@ -231,6 +244,7 @@ const initializeApplication = async (): Promise<void> => {
     setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
     notify,
     onSettingsChanged: notifySettingsChanged,
+    onScheduleStatusChanged: notifyScheduleStatusChanged,
     onLibraryChanged: notifyLibraryChanged,
     onRendererReady: markRendererReady,
   });

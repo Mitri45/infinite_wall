@@ -7,6 +7,7 @@ import type {
   GenerationProgress,
   GenerationRequest,
   OperationResult,
+  ScheduleStatus,
   WallpaperLibraryItem,
   WallpaperPreview,
   WallpaperRecord,
@@ -23,7 +24,9 @@ export const IPC_CHANNELS = {
   listWallpapers: 'wallpaper:list',
   setWallpaperFavorite: 'wallpaper:set-favorite',
   getSettings: 'settings:get',
+  getScheduleStatus: 'schedule:status:get',
   runScheduleNow: 'schedule:run-now',
+  scheduleStatusChanged: 'schedule:status:changed',
   settingsChanged: 'settings:changed',
   updateSettings: 'settings:update',
   appCommand: 'app:command',
@@ -51,6 +54,7 @@ export interface InfiniteWallApi {
     favorite: boolean,
   ) => Promise<OperationResult<WallpaperRecord>>;
   readonly getSettings: () => Promise<OperationResult<AppSettings>>;
+  readonly getScheduleStatus: () => Promise<OperationResult<ScheduleStatus>>;
   readonly runScheduleNow: () => Promise<OperationResult<boolean>>;
   readonly updateSettings: (
     patch: AppSettingsPatch,
@@ -59,6 +63,9 @@ export interface InfiniteWallApi {
   readonly onAppCommand: (listener: (command: AppCommand) => void) => () => void;
   readonly onLibraryChanged: (listener: () => void) => () => void;
   readonly onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
+  readonly onScheduleStatusChanged: (
+    listener: (status: ScheduleStatus) => void,
+  ) => () => void;
   readonly onGenerationProgress: (
     listener: (progress: GenerationProgress) => void,
   ) => () => void;

@@ -11,6 +11,7 @@ import {
   type AppSettingsPatch,
   type GenerationProgress,
   type OperationResult,
+  type ScheduleStatus,
   type WallpaperLibraryItem,
   type WallpaperPreview,
   type WallpaperRecord,
@@ -45,6 +46,7 @@ interface RegisterIpcHandlersOptions {
   readonly setLaunchAtLogin: (enabled: boolean) => Promise<void>;
   readonly notify: (title: string, body: string) => void;
   readonly onSettingsChanged?: (settings: AppSettings) => void;
+  readonly onScheduleStatusChanged?: (status: ScheduleStatus) => void;
   readonly onLibraryChanged?: () => void;
   readonly onRendererReady?: () => void;
 }
@@ -52,6 +54,7 @@ interface RegisterIpcHandlersOptions {
 export interface InfiniteWallRuntime {
   readonly dispose: () => Promise<void>;
   readonly getSettings: () => Promise<AppSettings>;
+  readonly getScheduleStatus: () => Promise<ScheduleStatus>;
   readonly runScheduledGeneration: () => Promise<void>;
   readonly updateSettings: (patch: AppSettingsPatch) => Promise<AppSettings>;
   readonly applyRandomExisting: () => Promise<boolean>;
@@ -89,7 +92,7 @@ export function registerIpcHandlers(
   let runtimeDisposing = false;
   let scheduledRunActive = false;
   let scheduledRunTail: Promise<void> = Promise.resolve();
-  const runScheduledGeneration = (): Promise<void> => {
+  const performScheduledGeneration = (): Promise<void> => {
     if (runtimeDisposing || scheduledRunActive || generationSessions.busy) {
       return Promise.reject(new Error('Generation is already active.'));
     }
@@ -129,9 +132,11 @@ export function registerIpcHandlers(
     return operation;
   };
   const scheduler = new ScheduleController({
-    run: runScheduledGeneration,
+    run: performScheduledGeneration,
     onFailure: (message) => options.notify('Infinite Wall schedule', message),
+    onStatusChange: options.onScheduleStatusChanged,
   });
+  const runScheduledGeneration = (): Promise<void> => scheduler.runNow();
   const settingsReady = settingsStore.load().then(async (settings) => {
     scheduler.configure(settings);
     options.onSettingsChanged?.(settings);
@@ -168,6 +173,11 @@ export function registerIpcHandlers(
     await settingsReady;
     await settingsMutationTail;
     return settingsStore.load();
+  };
+  const getScheduleStatus = async (): Promise<ScheduleStatus> => {
+    await settingsReady;
+    await settingsMutationTail;
+    return scheduler.getStatus();
   };
   const applyRandomExisting = async () => {
     const items = (await wallpaperService.list()).filter(
@@ -271,6 +281,16 @@ export function registerIpcHandlers(
       return settingsOperationFailure('Settings could not be loaded.');
     }
   });
+  ipcMain.handle(
+    IPC_CHANNELS.getScheduleStatus,
+    async (): Promise<OperationResult<ScheduleStatus>> => {
+      try {
+        return { ok: true, value: await getScheduleStatus() };
+      } catch {
+        return settingsOperationFailure('Schedule status could not be loaded.');
+      }
+    },
+  );
   ipcMain.handle(
     IPC_CHANNELS.runScheduleNow,
     async (): Promise<OperationResult<boolean>> => {
@@ -421,6 +441,7 @@ export function registerIpcHandlers(
 
   return {
     getSettings,
+    getScheduleStatus,
     runScheduledGeneration,
     updateSettings,
     applyRandomExisting,
