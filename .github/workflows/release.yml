@@ -38,6 +38,17 @@ jobs:
           test "v${package_version}" = "${GITHUB_REF_NAME}"
       - name: Build Linux installers
         run: pnpm make -- --platform linux --arch x64
+      - name: Normalize release asset names
+        shell: bash
+        run: |
+          while IFS= read -r -d '' file; do
+            directory="${file%/*}"
+            filename="${file##*/}"
+            normalized="${filename// /.}"
+            if [[ "${filename}" != "${normalized}" ]]; then
+              mv -- "${file}" "${directory}/${normalized}"
+            fi
+          done < <(find out/make -type f -name '*.zip' -print0)
       - name: Create checksums
         shell: bash
         run: |

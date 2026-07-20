@@ -1,7 +1,7 @@
 {
   "name": "infinite-wall",
   "productName": "Infinite Wall",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A private, Codex-powered desktop wallpaper generator.",
   "main": ".vite/build/main.js",
   "private": true,
