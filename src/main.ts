@@ -189,9 +189,12 @@ const rebuildTrayMenu = (settings?: AppSettings): void => {
   if (!tray || !runtime) return;
   const scheduleEnabled = settings?.scheduleHours !== null;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Generate', click: () => sendAppCommand({ type: 'generate' }) },
     {
-      label: 'Surprise Me',
+      label: 'Generate Current Direction',
+      click: () => sendAppCommand({ type: 'generate' }),
+    },
+    {
+      label: 'Surprise Me — Random Theme',
       click: () => sendAppCommand({
         type: 'surprise',
         themeId: THEME_IDS[Math.floor(Math.random() * THEME_IDS.length)],
