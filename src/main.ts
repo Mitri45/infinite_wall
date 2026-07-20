@@ -5,6 +5,7 @@ import {
   nativeImage,
   Notification,
   protocol,
+  screen,
   session,
   shell,
   Tray,
@@ -69,9 +70,12 @@ const registerContentSecurityPolicy = (): void => {
 
 const createWindow = (): BrowserWindow => {
   const applicationIcon = nativeImage.createFromPath(appAssetPath('window-icon.png'));
+  const workArea = screen.getPrimaryDisplay().workArea;
   const window = new BrowserWindow({
-    width: 1180,
-    height: 760,
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width,
+    height: workArea.height,
     minWidth: 880,
     minHeight: 620,
     backgroundColor: '#0b1020',
@@ -85,8 +89,11 @@ const createWindow = (): BrowserWindow => {
     },
   });
   window.setIcon(applicationIcon);
+  window.maximize();
 
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => {
+    window.show();
+  });
   window.on('close', (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -186,9 +193,12 @@ const rebuildTrayMenu = (settings?: AppSettings): void => {
   if (!tray || !runtime) return;
   const scheduleEnabled = settings?.scheduleHours !== null;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Generate', click: () => sendAppCommand({ type: 'generate' }) },
     {
-      label: 'Surprise Me',
+      label: 'Generate Current Direction',
+      click: () => sendAppCommand({ type: 'generate' }),
+    },
+    {
+      label: 'Surprise Me — Random Theme',
       click: () => sendAppCommand({
         type: 'surprise',
         themeId: THEME_IDS[Math.floor(Math.random() * THEME_IDS.length)],

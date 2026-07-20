@@ -290,10 +290,24 @@ describe('theme selection experience', () => {
       screen.getByRole('heading', { name: 'Where should we go?' }),
     ).toBeTruthy();
 
+    const minimalCardArtwork = document.querySelector(
+      '.theme-card[data-theme="minimal"] .theme-card-artwork',
+    );
+    const detailArtwork = document.querySelector('.direction-artwork');
+    expect(minimalCardArtwork?.getAttribute('src')).toBe(
+      detailArtwork?.getAttribute('src'),
+    );
+
     await user.click(
       screen.getByRole('button', { name: 'Nature — Wild Distance' }),
     );
     expect(screen.getByRole('heading', { name: 'Nature', level: 2 })).toBeTruthy();
+    const natureCardArtwork = document.querySelector(
+      '.theme-card[data-theme="nature"] .theme-card-artwork',
+    );
+    expect(natureCardArtwork?.getAttribute('src')).toBe(
+      document.querySelector('.direction-artwork')?.getAttribute('src'),
+    );
 
     await user.click(screen.getByRole('tab', { name: 'Curated' }));
     const tidalMirror = screen.getByRole('button', { name: /Tidal Mirror/ });
@@ -463,12 +477,12 @@ describe('theme selection experience', () => {
         percent: 52,
       });
     });
-    expect(await screen.findByText('52%')).toBeTruthy();
-    const progress = screen.getByRole('progressbar', {
-      name: 'Wallpaper generation progress',
-    });
-    expect(progress.getAttribute('value')).toBe('52');
-    expect(progress.getAttribute('style')).toBeNull();
+    expect(await screen.findByText('Generating the image locally through Codex…')).toBeTruthy();
+    expect(screen.getByText('Stage 2 of 4')).toBeTruthy();
+    expect(screen.getByText('Create').closest('li')?.getAttribute('aria-current')).toBe('step');
+    expect(screen.getByText(/Elapsed \d+:\d{2}/)).toBeTruthy();
+    expect(screen.queryByText('52%')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Cancel generation' }));
     expect(cancelGeneration).toHaveBeenCalledOnce();
@@ -627,6 +641,8 @@ describe('theme selection experience', () => {
     });
 
     expect(screen.queryByRole('button', { name: 'Cancel generation' })).toBeNull();
+    expect(screen.getByText('Stage 4 of 4')).toBeTruthy();
+    expect(screen.getByText('Save').closest('li')?.getAttribute('aria-current')).toBe('step');
     expect(screen.getByText('Finishing the private library save…')).toBeTruthy();
     resolveGeneration({ ok: true, value: preview });
     expect(
@@ -654,6 +670,12 @@ describe('theme selection experience', () => {
       'https://developers.openai.com/codex/cli/',
     );
     expect(setupLink.getAttribute('target')).toBe('_blank');
+    expect(screen.getByText('Generation unavailable')).toBeTruthy();
+    const generateButton = screen.getByRole('button', { name: /Generate wallpaper/ });
+    expect(generateButton.hasAttribute('disabled')).toBe(true);
+    expect(generateButton.getAttribute('aria-describedby')).toBe(
+      'generation-blocked-reason',
+    );
   });
 
   it('shows the local login command when Codex is signed out', async () => {

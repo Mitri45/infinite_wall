@@ -70,12 +70,43 @@ async function knownInstallCandidates(
       ]),
     );
     candidates.push(...(await nvmCandidates(home, executableNames)));
+    candidates.push(...(await fnmCandidates(home, environment, executableNames)));
   }
 
   for (const directory of platform === 'darwin'
     ? ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
     : ['/usr/local/bin', '/usr/bin', '/snap/bin']) {
     candidates.push(...executableNames.map((name) => path.join(directory, name)));
+  }
+
+  return candidates;
+}
+
+async function fnmCandidates(
+  home: string,
+  environment: NodeJS.ProcessEnv,
+  executableNames: readonly string[],
+): Promise<string[]> {
+  const configuredRoot = environment.FNM_DIR?.trim();
+  const dataHome = environment.XDG_DATA_HOME?.trim() || path.join(home, '.local', 'share');
+  const roots = [configuredRoot, path.join(dataHome, 'fnm'), path.join(home, '.fnm')]
+    .filter((root): root is string => Boolean(root && path.isAbsolute(root)));
+  const candidates: string[] = [];
+
+  for (const root of new Set(roots)) {
+    const versionsRoot = path.join(root, 'node-versions');
+    const versions = await readdir(versionsRoot, { withFileTypes: true }).catch(() => []);
+    candidates.push(
+      ...versions
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }))
+        .flatMap((version) =>
+          executableNames.map((name) =>
+            path.join(versionsRoot, version, 'installation', 'bin', name),
+          ),
+        ),
+    );
   }
 
   return candidates;

@@ -19,7 +19,7 @@ export function ThemeCard({ theme, index, selected, onSelect }: ThemeCardProps) 
       onClick={() => onSelect(theme.id)}
     >
       <span className="theme-card-art" aria-hidden="true">
-        <ThemeArtwork themeId={theme.id} />
+        <ThemeArtwork themeId={theme.id} className="theme-card-artwork" />
       </span>
       <span className="theme-card-copy">
         <span className="theme-index">{String(index).padStart(2, '0')}</span>
