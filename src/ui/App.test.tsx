@@ -477,12 +477,12 @@ describe('theme selection experience', () => {
         percent: 52,
       });
     });
-    expect(await screen.findByText('52%')).toBeTruthy();
-    const progress = screen.getByRole('progressbar', {
-      name: 'Wallpaper generation progress',
-    });
-    expect(progress.getAttribute('value')).toBe('52');
-    expect(progress.getAttribute('style')).toBeNull();
+    expect(await screen.findByText('Generating the image locally through Codex…')).toBeTruthy();
+    expect(screen.getByText('Stage 2 of 4')).toBeTruthy();
+    expect(screen.getByText('Create').closest('li')?.getAttribute('aria-current')).toBe('step');
+    expect(screen.getByText(/Elapsed \d+:\d{2}/)).toBeTruthy();
+    expect(screen.queryByText('52%')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Cancel generation' }));
     expect(cancelGeneration).toHaveBeenCalledOnce();
@@ -641,6 +641,8 @@ describe('theme selection experience', () => {
     });
 
     expect(screen.queryByRole('button', { name: 'Cancel generation' })).toBeNull();
+    expect(screen.getByText('Stage 4 of 4')).toBeTruthy();
+    expect(screen.getByText('Save').closest('li')?.getAttribute('aria-current')).toBe('step');
     expect(screen.getByText('Finishing the private library save…')).toBeTruthy();
     resolveGeneration({ ok: true, value: preview });
     expect(

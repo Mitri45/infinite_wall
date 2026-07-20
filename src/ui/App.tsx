@@ -25,6 +25,7 @@ const INITIAL_PROGRESS: GenerationProgress = {
   message: 'Preparing generation…',
   percent: 2,
 };
+const GENERATION_STAGES = ['Prepare', 'Create', 'Check', 'Save'] as const;
 const DEFAULT_SETTINGS: AppSettings = {
   quality: 'standard', scheduleHours: null, schedulePaused: false,
   launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
@@ -77,6 +78,19 @@ const formatLocalTime = (nextRunAt: string): string =>
     minute: '2-digit',
   }).format(new Date(nextRunAt));
 
+const generationStageIndex = (phase: GenerationProgress['phase']): number => {
+  if (phase === 'preparing') return 0;
+  if (phase === 'starting' || phase === 'generating') return 1;
+  if (phase === 'validating') return 2;
+  return 3;
+};
+
+const formatElapsedTime = (elapsedSeconds: number): string => {
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
 type ActivePreview = WallpaperLibraryItem & {
   readonly source: 'generated' | 'library';
 };
@@ -97,6 +111,8 @@ export function App() {
   const [generating, setGenerating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<GenerationProgress>(INITIAL_PROGRESS);
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [generationClock, setGenerationClock] = useState(Date.now());
   const [preview, setPreview] = useState<ActivePreview | null>(null);
   const [wallpapers, setWallpapers] = useState<WallpaperLibraryItem[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -175,6 +191,12 @@ export function App() {
     }
     return window.infiniteWall.onGenerationProgress(setProgress);
   }, []);
+
+  useEffect(() => {
+    if (!generating) return undefined;
+    const clock = window.setInterval(() => setGenerationClock(Date.now()), 1_000);
+    return () => window.clearInterval(clock);
+  }, [generating]);
 
   const refreshLibrary = useCallback(async () => {
     if (!window.infiniteWall?.listWallpapers) {
@@ -319,6 +341,9 @@ export function App() {
       setPreview(null);
       setGenerationError(null);
       setProgress(INITIAL_PROGRESS);
+      const startedAt = Date.now();
+      setGenerationStartedAt(startedAt);
+      setGenerationClock(startedAt);
       const result = await window.infiniteWall.generateWallpaper(
         await buildRequest(themeOverride),
       );
@@ -340,6 +365,14 @@ export function App() {
       setCancelling(false);
     }
   }, [buildRequest, checkCodex, codexDiagnostics, refreshLibrary]);
+
+  const activeGenerationStage = generationStageIndex(progress.phase);
+  const generationElapsedSeconds = generationStartedAt === null
+    ? 0
+    : Math.max(0, Math.floor((generationClock - generationStartedAt) / 1_000));
+  const generationExpectation = generationElapsedSeconds < 120
+    ? 'Most wallpapers take about 1–2 minutes.'
+    : 'Complex scenes can take longer. Codex is still working.';
 
   useEffect(() => {
     if (!window.infiniteWall?.onAppCommand) return undefined;
@@ -730,20 +763,42 @@ export function App() {
           ) : generating ? (
             <section className="generation-progress" aria-labelledby="generation-progress-title">
               <div className="progress-heading">
-                <span className="generation-spinner" aria-hidden="true" />
+                <div className="generation-study" aria-hidden="true">
+                  <span className="generation-shape generation-shape-one" />
+                  <span className="generation-shape generation-shape-two" />
+                  <span className="generation-shape generation-shape-three" />
+                </div>
                 <div>
                   <p className="eyebrow">{selectionLabel}</p>
                   <h3 id="generation-progress-title">Creating your wallpaper</h3>
+                  <p className="generation-expectation">{generationExpectation}</p>
                 </div>
-                <span className="progress-percent">{progress.percent}%</span>
               </div>
-              <progress
-                className="progress-track"
-                max={100}
-                value={progress.percent}
-                aria-label="Wallpaper generation progress"
-              />
-              <p className="progress-message" aria-live="polite">{progress.message}</p>
+              <ol className="generation-stages" aria-label="Generation stages">
+                {GENERATION_STAGES.map((stage, index) => (
+                  <li
+                    key={stage}
+                    className={index < activeGenerationStage
+                      ? 'is-complete'
+                      : index === activeGenerationStage
+                        ? 'is-active'
+                        : undefined}
+                    aria-current={index === activeGenerationStage ? 'step' : undefined}
+                  >
+                    <span className="generation-stage-mark" aria-hidden="true" />
+                    <span>{stage}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="generation-status">
+                <div className="generation-status-meta">
+                  <span>Stage {activeGenerationStage + 1} of {GENERATION_STAGES.length}</span>
+                  <span>Elapsed {formatElapsedTime(generationElapsedSeconds)}</span>
+                </div>
+                <p className="progress-message" aria-live="polite" aria-atomic="true">
+                  {progress.message}
+                </p>
+              </div>
               {progress.phase !== 'importing' && progress.phase !== 'complete' ? (
                 <button
                   className="cancel-action"
