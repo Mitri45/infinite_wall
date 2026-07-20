@@ -937,7 +937,6 @@ export function App() {
 
             <section
               className={`schedule-status-card is-${schedulePresentation.state}`}
-              aria-live="polite"
               aria-label="Wallpaper schedule status"
             >
               <span className="schedule-status-dot" aria-hidden="true" />
