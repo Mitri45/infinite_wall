@@ -3,6 +3,30 @@
 Infinite Wall is a desktop app that creates original wallpapers with Codex,
 keeps them in a private local library, and applies them to your desktop.
 
+## OpenAI Build Week submission
+
+Infinite Wall was created during OpenAI Build Week, with
+Codex jugling two distinct roles: it collaborated with me throughout product
+development, and it is the runtime engine that powers the art generation.
+
+### How I collaborated with Codex
+
+Codex (GPT 5.6 Sol) was used from the very start planning phase of the project from to packaged desktop
+application. It helped turn the initial direction into desctop app architecture, prototype and refine the interface, implement the
+generation, library, scheduling, and tray workflows with decent test coverage. Additionally Codex Code Review was used on each PR to make sure the quality of the application stays sharp.
+
+### How Codex and GPT contribute to the result
+
+For every generation, Infinite Wall starts an isolated, ephemeral Codex CLI
+session. The app supplies the selected visual world,
+mode, composition guidance, display dimensions, and recent concepts. GPT
+turns that direction into the final image prompt, uses Codex's image-generation
+capability to create one original wallpaper, and returns structured metadata.
+Infinite Wall then validates the file type, decoded image, aspect ratio, output
+location, and metadata before atomically importing the result into the private
+local library. This makes Codex and GPT part of the shipped product rather
+than only tools used to write its code.
+
 ## What it does
 
 - Offers 13 visual categories, from Minimal and Nature to Cosmic and Illustrated.
@@ -65,24 +89,6 @@ extract it, and run the `infinite-wall` executable inside.
 Infinite Wall stores generated images, prompts, settings, and history only in
 its local app data. Codex sends generation requests to OpenAI using your signed-in
 session; Infinite Wall adds no analytics, advertising, or separate cloud backend.
-
-## Built with Codex and GPT-5.6
-
-Infinite Wall was created in a new repository during OpenAI Build Week, with
-Codex as both a development collaborator and the application's runtime engine.
-Codex accelerated the Electron and TypeScript implementation, UI prototyping,
-test coverage, Linux packaging, and review-driven polish.
-
-The key product decisions remained human-directed: start from a clean project,
-combine curated visual worlds with custom prompts, use the signed-in Codex CLI
-instead of collecting API keys, keep the library local, and make scheduling
-opt-in. Those decisions were refined through hands-on testing of the packaged
-application.
-
-At runtime, Infinite Wall starts an isolated, ephemeral Codex session using
-GPT-5.6. Codex turns the selected visual direction into a final image prompt,
-generates one wallpaper, and returns structured metadata for local validation
-and storage.
 
 ## Run from source
 
