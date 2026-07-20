@@ -101,6 +101,44 @@ describe('ScheduleController', () => {
     expect(onStatusChange).toHaveBeenLastCalledWith(scheduler.getStatus());
   });
 
+  it('defers a timer collision without replacing an active run-now job', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T01:00:00.000Z'));
+    let finishRunNow!: () => void;
+    const runNowOperation = new Promise<void>((resolve) => {
+      finishRunNow = resolve;
+    });
+    const run = vi.fn()
+      .mockImplementationOnce(() => runNowOperation)
+      .mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const scheduler = new ScheduleController({ run, onFailure });
+    scheduler.configure(appSettingsSchema.parse({ scheduleHours: 1 }));
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+
+    const operation = scheduler.runNow();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(scheduler.getStatus()).toEqual({
+      state: 'running', intervalHours: 1, nextRunAt: null,
+    });
+
+    finishRunNow();
+    await operation;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scheduler.getStatus()).toEqual({
+      state: 'active',
+      intervalHours: 1,
+      nextRunAt: '2026-07-20T03:00:00.000Z',
+    });
+
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it('reports run-now work in manual mode', async () => {
     let finishRun!: () => void;
     const scheduler = new ScheduleController({

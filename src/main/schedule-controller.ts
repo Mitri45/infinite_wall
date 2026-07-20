@@ -95,6 +95,10 @@ export class ScheduleController {
     this.#timer = this.#setTimer(() => {
       this.#timer = null;
       this.#nextRunAt = null;
+      if (this.#activeRun) {
+        this.#scheduleNext(revision);
+        return;
+      }
       const operation = Promise.resolve().then(this.#run);
       this.#trackRun(operation, revision);
     }, hours * 60 * 60 * 1000);
