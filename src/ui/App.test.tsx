@@ -654,6 +654,12 @@ describe('theme selection experience', () => {
       'https://developers.openai.com/codex/cli/',
     );
     expect(setupLink.getAttribute('target')).toBe('_blank');
+    expect(screen.getByText('Generation unavailable')).toBeTruthy();
+    const generateButton = screen.getByRole('button', { name: /Generate wallpaper/ });
+    expect(generateButton.hasAttribute('disabled')).toBe(true);
+    expect(generateButton.getAttribute('aria-describedby')).toBe(
+      'generation-blocked-reason',
+    );
   });
 
   it('shows the local login command when Codex is signed out', async () => {

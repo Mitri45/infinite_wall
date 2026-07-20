@@ -502,11 +502,25 @@ export function App() {
     setGenerationError(null);
   };
 
-  const canGenerate =
-    (mode !== 'custom' || customPrompt.trim().length >= 3) &&
-    codexDiagnostics?.authenticated === true &&
-    !scheduleRunning &&
-    platform !== 'preview';
+  const generationBlockedReason = (() => {
+    if (platform === 'preview') {
+      return 'Wallpaper generation is unavailable in the interface preview.';
+    }
+    if (checkingCodex || codexDiagnostics === null) {
+      return 'Checking your local Codex setup before generation can begin.';
+    }
+    if (!codexDiagnostics.authenticated) {
+      return codexDiagnostics.message;
+    }
+    if (scheduleRunning) {
+      return 'A scheduled wallpaper is already being generated.';
+    }
+    if (mode === 'custom' && customPrompt.trim().length < 3) {
+      return 'Enter at least 3 characters for your custom direction.';
+    }
+    return null;
+  })();
+  const canGenerate = generationBlockedReason === null;
   const schedulePresentation = useMemo(() => {
     if (scheduleRunning || scheduleStatus.state === 'running') {
       return {
@@ -770,16 +784,28 @@ export function App() {
               )}
 
               <div className="panel-action">
+                {generationBlockedReason && (
+                  <div className="generation-blocked" role="status">
+                    <span className="generation-blocked-mark" aria-hidden="true">!</span>
+                    <p id="generation-blocked-reason">
+                      <strong>Generation unavailable</strong>
+                      <span>{generationBlockedReason}</span>
+                    </p>
+                  </div>
+                )}
                 <button
                   className="primary-action"
                   type="button"
                   disabled={!canGenerate}
+                  aria-describedby={generationBlockedReason
+                    ? 'generation-blocked-reason'
+                    : 'generation-privacy-note'}
                   onClick={() => void handleGenerate()}
                 >
                   Generate wallpaper
                   <span aria-hidden="true">→</span>
                 </button>
-                <p className="action-note">
+                <p className="action-note" id="generation-privacy-note">
                   Uses your signed-in Codex session. No API key is stored by Infinite Wall.
                 </p>
               </div>

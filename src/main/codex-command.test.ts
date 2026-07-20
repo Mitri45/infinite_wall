@@ -47,4 +47,29 @@ describe('resolveCodexCommand', () => {
       resolveCodexCommand({ environment: { HOME: home, PATH: '' }, platform: 'linux' }),
     ).resolves.toBe(executable);
   });
+
+  it('finds Codex installed by fnm even when the GUI PATH omits it', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-home-'));
+    temporaryRoots.push(home);
+    const dataHome = path.join(home, '.local', 'share');
+    const executable = path.join(
+      dataHome,
+      'fnm',
+      'node-versions',
+      'v24.11.1',
+      'installation',
+      'bin',
+      'codex',
+    );
+    await mkdir(path.dirname(executable), { recursive: true });
+    await writeFile(executable, '#!/usr/bin/env node\n');
+    await chmod(executable, 0o700);
+
+    await expect(
+      resolveCodexCommand({
+        environment: { HOME: home, XDG_DATA_HOME: dataHome, PATH: '' },
+        platform: 'linux',
+      }),
+    ).resolves.toBe(executable);
+  });
 });
