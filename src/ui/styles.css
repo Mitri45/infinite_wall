@@ -1914,6 +1914,7 @@ h2 {
     transition-duration: 0.01ms !important;
   }
 
+  .direction-artwork,
   .generation-shape {
     animation: none !important;
   }
