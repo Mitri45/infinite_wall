@@ -86,7 +86,10 @@ const createWindow = (): BrowserWindow => {
   });
   window.setIcon(applicationIcon);
 
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => {
+    window.maximize();
+    window.show();
+  });
   window.on('close', (event) => {
     if (!quitting) {
       event.preventDefault();
