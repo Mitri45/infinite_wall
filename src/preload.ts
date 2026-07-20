@@ -6,6 +6,7 @@ import type {
   AppSettingsPatch,
   GenerationProgress,
   GenerationRequest,
+  ScheduleStatus,
 } from './shared/contracts';
 import {
   appCommandSchema,
@@ -13,6 +14,7 @@ import {
   appSettingsPatchSchema,
   generationProgressSchema,
   identifierSchema,
+  scheduleStatusSchema,
 } from './shared/contracts';
 import type { InfiniteWallApi } from './shared/ipc';
 import { IPC_CHANNELS } from './shared/ipc';
@@ -36,6 +38,7 @@ const api: InfiniteWallApi = Object.freeze({
       favorite,
     ),
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  getScheduleStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getScheduleStatus),
   runScheduleNow: () => ipcRenderer.invoke(IPC_CHANNELS.runScheduleNow),
   updateSettings: (patch: AppSettingsPatch) =>
     ipcRenderer.invoke(IPC_CHANNELS.updateSettings, appSettingsPatchSchema.parse(patch)),
@@ -74,6 +77,15 @@ const api: InfiniteWallApi = Object.freeze({
     };
     ipcRenderer.on(IPC_CHANNELS.settingsChanged, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, handler);
+  },
+  onScheduleStatusChanged: (listener: (status: ScheduleStatus) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => {
+      const parsed = scheduleStatusSchema.safeParse(status);
+      if (parsed.success) listener(parsed.data);
+    };
+    ipcRenderer.on(IPC_CHANNELS.scheduleStatusChanged, handler);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.scheduleStatusChanged, handler);
   },
 });
 

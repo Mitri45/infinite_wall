@@ -8,6 +8,7 @@ import type {
   GenerationProgress,
   GenerationRequest,
   PublicAppError,
+  ScheduleStatus,
   ThemeId,
   WallpaperLibraryItem,
   WallpaperRecord,
@@ -15,6 +16,7 @@ import type {
 import { getThemePack, THEME_PACKS } from '../shared/themes';
 import { CodexStatus } from './CodexStatus';
 import { ScenePicker, type SelectionMode } from './ScenePicker';
+import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
 import { ThemeCard } from './ThemeCard';
 
 const INITIAL_PROGRESS: GenerationProgress = {
@@ -26,6 +28,53 @@ const DEFAULT_SETTINGS: AppSettings = {
   quality: 'standard', scheduleHours: null, schedulePaused: false,
   launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
 };
+const DEFAULT_SCHEDULE_STATUS: ScheduleStatus = {
+  state: 'manual',
+  intervalHours: null,
+  nextRunAt: null,
+};
+const QUALITY_OPTIONS: readonly SettingsSelectOption[] = [
+  {
+    value: 'standard',
+    label: 'Standard',
+    description: 'Balanced detail and generation time',
+  },
+  {
+    value: 'high',
+    label: 'High',
+    description: 'More detail, with a longer wait',
+  },
+];
+const SCHEDULE_OPTIONS: readonly SettingsSelectOption[] = [
+  { value: '', label: 'Manual only', description: 'Generate only when you ask' },
+  { value: '1', label: 'Every hour', description: 'A new wallpaper every 60 minutes' },
+  { value: '3', label: 'Every 3 hours', description: 'Four changes during a 12-hour day' },
+  { value: '6', label: 'Every 6 hours', description: 'Four changes each day' },
+  { value: '12', label: 'Every 12 hours', description: 'Two changes each day' },
+  { value: '24', label: 'Every 24 hours', description: 'One change each day' },
+];
+
+const formatInterval = (hours: number): string =>
+  hours === 1 ? '1-hour' : `${hours}-hour`;
+
+const formatTimeRemaining = (nextRunAt: string, now: number): string => {
+  const remainingMinutes = Math.max(
+    0,
+    Math.ceil((new Date(nextRunAt).getTime() - now) / 60_000),
+  );
+  if (remainingMinutes < 60) {
+    return remainingMinutes <= 1 ? 'less than a minute' : `${remainingMinutes} min`;
+  }
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`;
+};
+
+const formatLocalTime = (nextRunAt: string): string =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(nextRunAt));
 
 type ActivePreview = WallpaperLibraryItem & {
   readonly source: 'generated' | 'library';
@@ -52,6 +101,10 @@ export function App() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeWallpaperId, setActiveWallpaperId] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [scheduleStatus, setScheduleStatus] = useState<ScheduleStatus>(
+    DEFAULT_SCHEDULE_STATUS,
+  );
+  const [scheduleClock, setScheduleClock] = useState(Date.now());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scheduleRunning, setScheduleRunning] = useState(false);
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
@@ -167,6 +220,32 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!window.infiniteWall?.getScheduleStatus) return;
+    void window.infiniteWall.getScheduleStatus().then((result) => {
+      if (result.ok) {
+        setScheduleStatus(result.value);
+        setScheduleClock(Date.now());
+      } else {
+        setSettingsError(result.error.message);
+      }
+    }).catch(() => setSettingsError('Schedule status could not be loaded.'));
+  }, []);
+
+  useEffect(() => {
+    if (!window.infiniteWall?.onScheduleStatusChanged) return undefined;
+    return window.infiniteWall.onScheduleStatusChanged((status) => {
+      setScheduleStatus(status);
+      setScheduleClock(Date.now());
+    });
+  }, []);
+
+  useEffect(() => {
+    if (scheduleStatus.state !== 'active') return undefined;
+    const clock = window.setInterval(() => setScheduleClock(Date.now()), 30_000);
+    return () => window.clearInterval(clock);
+  }, [scheduleStatus.state]);
+
+  useEffect(() => {
     if (!settingsOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     const manageDialogKeyboard = (event: KeyboardEvent) => {
@@ -272,12 +351,20 @@ export function App() {
     window.infiniteWall?.signalRendererReady?.();
   }, []);
 
-  const updateSettings = useCallback(async (patch: AppSettingsPatch) => {
+  const updateSettings = useCallback(async (
+    patch: AppSettingsPatch,
+    confirmation?: string,
+  ) => {
     setSettingsError(null);
+    setScheduleMessage(null);
     try {
       const result = await window.infiniteWall.updateSettings(patch);
-      if (result.ok) setSettings(result.value);
-      else setSettingsError(result.error.message);
+      if (result.ok) {
+        setSettings(result.value);
+        if (confirmation) setScheduleMessage(confirmation);
+      } else {
+        setSettingsError(result.error.message);
+      }
     } catch {
       setSettingsError('Settings could not be saved.');
     }
@@ -420,6 +507,34 @@ export function App() {
     codexDiagnostics?.authenticated === true &&
     !scheduleRunning &&
     platform !== 'preview';
+  const schedulePresentation = useMemo(() => {
+    if (scheduleRunning || scheduleStatus.state === 'running') {
+      return {
+        state: 'running',
+        label: 'Change in progress',
+        detail: 'Generating and applying a new wallpaper now.',
+      } as const;
+    }
+    if (scheduleStatus.state === 'manual') {
+      return {
+        state: 'manual',
+        label: 'Manual mode',
+        detail: 'Nothing runs automatically. Generate whenever you want.',
+      } as const;
+    }
+    if (scheduleStatus.state === 'paused') {
+      return {
+        state: 'paused',
+        label: 'Automatic changes paused',
+        detail: `Resume to start a new ${formatInterval(scheduleStatus.intervalHours)} countdown.`,
+      } as const;
+    }
+    return {
+      state: 'active',
+      label: 'Automatic changes active',
+      detail: `Next wallpaper in ${formatTimeRemaining(scheduleStatus.nextRunAt, scheduleClock)} · ${formatLocalTime(scheduleStatus.nextRunAt)}`,
+    } as const;
+  }, [scheduleClock, scheduleRunning, scheduleStatus]);
 
   return (
     <div className="app-shell" data-theme={selectedTheme.id}>
@@ -430,14 +545,17 @@ export function App() {
         </a>
         <div className="topbar-meta">
           <button
-            className="settings-link"
+            className="settings-button"
             ref={settingsButtonRef}
             type="button"
             aria-expanded={settingsOpen}
             aria-controls="settings-drawer"
             onClick={() => setSettingsOpen(true)}
           >
-            Settings
+            <svg aria-hidden="true" viewBox="0 0 16 16">
+              <path d="M3 4h10M5.5 8h7.5M3 12h10M5.5 2.5v3M10.5 6.5v3M6.5 10.5v3" />
+            </svg>
+            <span>Settings</span>
           </button>
           <CodexStatus
             diagnostics={codexDiagnostics}
@@ -778,40 +896,90 @@ export function App() {
             </div>
 
             <div className="settings-grid">
-              <label>
-                <span>Generation quality</span>
-                <select value={settings.quality} onChange={(event) => void updateSettings({ quality: event.target.value as AppSettings['quality'] })}>
-                  <option value="standard">Standard</option><option value="high">High</option>
-                </select>
-              </label>
-              <label>
-                <span>Wallpaper schedule</span>
-                <select value={settings.scheduleHours ?? ''} onChange={(event) => {
-                  setScheduleMessage(null);
-                  void updateSettings({ scheduleHours: event.target.value ? Number(event.target.value) as 1 | 3 | 6 | 12 | 24 : null, schedulePaused: false });
-                }}>
-                  <option value="">Manual only</option><option value="1">Every hour</option><option value="3">Every 3 hours</option><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option>
-                </select>
-              </label>
+              <SettingsSelect
+                label="Generation quality"
+                value={settings.quality}
+                options={QUALITY_OPTIONS}
+                onChange={(value) => void updateSettings(
+                  { quality: value as AppSettings['quality'] },
+                  `Generation quality set to ${value === 'high' ? 'High' : 'Standard'}.`,
+                )}
+              />
+              <SettingsSelect
+                label="Wallpaper schedule"
+                value={settings.scheduleHours?.toString() ?? ''}
+                options={SCHEDULE_OPTIONS}
+                onChange={(value) => {
+                  const scheduleHours = value
+                    ? Number(value) as NonNullable<AppSettings['scheduleHours']>
+                    : null;
+                  void updateSettings(
+                    { scheduleHours, schedulePaused: false },
+                    scheduleHours
+                      ? `${formatInterval(scheduleHours)} schedule started.`
+                      : 'Automatic wallpaper changes turned off.',
+                  );
+                }}
+              />
               <label className="toggle-setting">
-                <input type="checkbox" checked={settings.launchAtLogin} onChange={(event) => void updateSettings({ launchAtLogin: event.target.checked })} />
+                <input
+                  type="checkbox"
+                  checked={settings.launchAtLogin}
+                  onChange={(event) => void updateSettings(
+                    { launchAtLogin: event.target.checked },
+                    `Launch at login ${event.target.checked ? 'enabled' : 'disabled'}.`,
+                  )}
+                />
+                <span aria-hidden="true" className="toggle-control" />
                 <span>Launch Infinite Wall at login</span>
               </label>
             </div>
 
+            <section
+              className={`schedule-status-card is-${schedulePresentation.state}`}
+              aria-live="polite"
+              aria-label="Wallpaper schedule status"
+            >
+              <span className="schedule-status-dot" aria-hidden="true" />
+              <div>
+                <strong>{schedulePresentation.label}</strong>
+                <p>{schedulePresentation.detail}</p>
+              </div>
+            </section>
+
             <div className="schedule-actions">
-              <button className="secondary-action" type="button" disabled={!settings.scheduleHours || scheduleRunning} onClick={() => void updateSettings({ schedulePaused: !settings.schedulePaused })}>
-                {settings.schedulePaused ? 'Resume schedule' : 'Pause schedule'}
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={!settings.scheduleHours || scheduleRunning}
+                onClick={() => void updateSettings(
+                  { schedulePaused: !settings.schedulePaused },
+                  settings.schedulePaused
+                    ? `Schedule resumed with a new ${formatInterval(settings.scheduleHours ?? 1)} countdown.`
+                    : 'Automatic wallpaper changes paused.',
+                )}
+              >
+                {settings.schedulePaused
+                  ? 'Resume automatic changes'
+                  : 'Pause automatic changes'}
               </button>
-              <button className="primary-action" type="button" disabled={!settings.scheduleHours || scheduleRunning} onClick={() => void runScheduleNow()}>
-                {scheduleRunning ? 'Generating and applying…' : 'Run schedule now'}
+              <button
+                className="primary-action"
+                type="button"
+                disabled={scheduleRunning || generating}
+                onClick={() => void runScheduleNow()}
+              >
+                {scheduleRunning ? 'Generating and applying…' : 'Generate & apply now'}
                 <span aria-hidden="true">→</span>
               </button>
             </div>
 
             {settingsError && <p className="library-error" role="alert">{settingsError}</p>}
             {scheduleMessage && <p className="settings-success" role="status">{scheduleMessage}</p>}
-            <p className="settings-note">Run now uses the same random-theme, generate, import, and auto-apply path as the timer. Failures notify once and never enter a retry loop.</p>
+            <p className="settings-note">
+              Generate &amp; apply now chooses a random direction immediately. It
+              does not move your next automatic change or create a retry loop.
+            </p>
           </aside>
         </div>
       )}

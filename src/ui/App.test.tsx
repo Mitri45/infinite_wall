@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppSettingsPatch,
   CodexDiagnostics,
+  ScheduleStatus,
   WallpaperLibraryItem,
   WallpaperPreview,
 } from '../shared/contracts';
@@ -20,6 +21,14 @@ const readyDiagnostics: CodexDiagnostics = {
   authMethod: 'chatgpt',
   issue: null,
   message: 'Codex is installed and ready.',
+};
+const DEFAULT_TEST_SETTINGS = {
+  quality: 'standard' as const,
+  scheduleHours: null,
+  schedulePaused: false,
+  launchAtLogin: false,
+  libraryLimit: 100,
+  applyToAllDisplays: true as const,
 };
 
 beforeEach(() => installBridge(readyDiagnostics));
@@ -83,17 +92,19 @@ function installBridge(
       }),
       getSettings: async () => ({
         ok: true,
+        value: DEFAULT_TEST_SETTINGS,
+      }),
+      getScheduleStatus: async () => ({
+        ok: true,
         value: {
-          quality: 'standard', scheduleHours: null, schedulePaused: false,
-          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+          state: 'manual', intervalHours: null, nextRunAt: null,
         },
       }),
       runScheduleNow: async () => ({ ok: true, value: true }),
       updateSettings: async (patch: AppSettingsPatch) => ({
         ok: true,
         value: {
-          quality: 'standard', scheduleHours: null, schedulePaused: false,
-          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+          ...DEFAULT_TEST_SETTINGS,
           ...patch,
         },
       }),
@@ -101,10 +112,20 @@ function installBridge(
       onAppCommand: () => () => undefined,
       onLibraryChanged: () => () => undefined,
       onSettingsChanged: () => () => undefined,
+      onScheduleStatusChanged: () => () => undefined,
       onGenerationProgress: () => () => undefined,
       ...overrides,
     },
   });
+}
+
+async function chooseSetting(
+  user: ReturnType<typeof userEvent.setup>,
+  label: RegExp,
+  option: RegExp,
+) {
+  await user.click(screen.getByRole('button', { name: label }));
+  await user.click(screen.getByRole('option', { name: option }));
 }
 
 describe('theme selection experience', () => {
@@ -131,7 +152,7 @@ describe('theme selection experience', () => {
     render(<App />);
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.selectOptions(screen.getByLabelText('Wallpaper schedule'), '3');
+    await chooseSetting(user, /Wallpaper schedule.*Manual only/, /Every 3 hours/);
     await user.click(screen.getByLabelText('Launch Infinite Wall at login'));
     expect(updateSettings).toHaveBeenCalledWith({ scheduleHours: 3, schedulePaused: false });
     expect(updateSettings).toHaveBeenCalledWith({ launchAtLogin: true });
@@ -156,9 +177,9 @@ describe('theme selection experience', () => {
       launchAtLogin: true, libraryLimit: 100, applyToAllDisplays: true,
     }));
 
-    expect((screen.getByLabelText('Generation quality') as HTMLSelectElement).value).toBe('high');
-    expect((screen.getByLabelText('Wallpaper schedule') as HTMLSelectElement).value).toBe('3');
-    expect(screen.getByRole('button', { name: 'Resume schedule' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generation quality.*High/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Wallpaper schedule.*Every 3 hours/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Resume automatic changes' })).toBeTruthy();
   });
 
   it('opens settings in a dialog and runs the real schedule path on demand', async () => {
@@ -178,7 +199,7 @@ describe('theme selection experience', () => {
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
-    const runNow = await screen.findByRole('button', { name: /Run schedule now/ });
+    const runNow = await screen.findByRole('button', { name: /Generate & apply now/ });
     await user.click(runNow);
 
     expect(runScheduleNow).toHaveBeenCalledOnce();
@@ -190,6 +211,75 @@ describe('theme selection experience', () => {
         screen.getByRole('button', { name: 'Settings' }),
       );
     });
+  });
+
+  it('shows the real next deadline and explains pause and run-now behavior', async () => {
+    const nextRunAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const statusListener: {
+      current: ((status: ScheduleStatus) => void) | null;
+    } = { current: null };
+    installBridge(readyDiagnostics, {
+      getSettings: async () => ({
+        ok: true,
+        value: {
+          quality: 'standard', scheduleHours: 3, schedulePaused: false,
+          launchAtLogin: false, libraryLimit: 100, applyToAllDisplays: true,
+        },
+      }),
+      getScheduleStatus: async () => ({
+        ok: true,
+        value: { state: 'active', intervalHours: 3, nextRunAt },
+      }),
+      onScheduleStatusChanged: (listener) => {
+        statusListener.current = listener;
+        return () => undefined;
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByText('Automatic changes active')).toBeTruthy();
+    expect(screen.getByText(/Next wallpaper in 3 hr/)).toBeTruthy();
+    expect(screen.getByText(/does not move your next automatic change/)).toBeTruthy();
+
+    act(() => statusListener.current?.({
+      state: 'paused', intervalHours: 3, nextRunAt: null,
+    }));
+    expect(screen.getByText('Automatic changes paused')).toBeTruthy();
+    expect(screen.getByText(/Resume to start a new 3-hour countdown/)).toBeTruthy();
+  });
+
+  it('supports keyboard selection and restores focus to the settings control', async () => {
+    const updateSettings = vi.fn(async (patch) => ({
+      ok: true as const,
+      value: {
+        ...DEFAULT_TEST_SETTINGS,
+        ...patch,
+      },
+    }));
+    installBridge(readyDiagnostics, { updateSettings });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const settingsControl = screen.getByRole('button', { name: 'Settings' });
+    await user.click(settingsControl);
+    const quality = screen.getByRole('button', {
+      name: /Generation quality.*Standard/,
+    });
+    quality.focus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(updateSettings).toHaveBeenCalledWith(
+      { quality: 'high' },
+    );
+    await waitFor(() => expect(document.activeElement).toBe(quality));
+
+    await user.keyboard('{Enter}{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(quality));
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(document.activeElement).toBe(settingsControl));
   });
 
   it('switches themes and curated scenes', async () => {

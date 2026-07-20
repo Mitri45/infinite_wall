@@ -235,10 +235,18 @@ export const wallpaperLibraryItemSchema = z
 
 export type WallpaperLibraryItem = z.infer<typeof wallpaperLibraryItemSchema>;
 
+export const scheduleHoursSchema = z.union([
+  z.literal(1),
+  z.literal(3),
+  z.literal(6),
+  z.literal(12),
+  z.literal(24),
+]);
+
 export const appSettingsSchema = z
   .object({
     quality: z.enum(['standard', 'high']).default('standard'),
-    scheduleHours: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)]).nullable().default(null),
+    scheduleHours: scheduleHoursSchema.nullable().default(null),
     schedulePaused: z.boolean().default(false),
     launchAtLogin: z.boolean().default(false),
     libraryLimit: z.number().int().min(20).max(500).default(100),
@@ -249,13 +257,46 @@ export const appSettingsSchema = z
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export const appSettingsPatchSchema = z.object({
   quality: z.enum(['standard', 'high']).optional(),
-  scheduleHours: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)]).nullable().optional(),
+  scheduleHours: scheduleHoursSchema.nullable().optional(),
   schedulePaused: z.boolean().optional(),
   launchAtLogin: z.boolean().optional(),
   libraryLimit: z.number().int().min(20).max(500).optional(),
   applyToAllDisplays: z.literal(true).optional(),
 }).strict();
 export type AppSettingsPatch = z.input<typeof appSettingsPatchSchema>;
+
+export const scheduleStatusSchema = z.discriminatedUnion('state', [
+  z
+    .object({
+      state: z.literal('manual'),
+      intervalHours: z.null(),
+      nextRunAt: z.null(),
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal('paused'),
+      intervalHours: scheduleHoursSchema,
+      nextRunAt: z.null(),
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal('active'),
+      intervalHours: scheduleHoursSchema,
+      nextRunAt: z.string().datetime({ offset: true }),
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal('running'),
+      intervalHours: scheduleHoursSchema,
+      nextRunAt: z.null(),
+    })
+    .strict(),
+]);
+
+export type ScheduleStatus = z.infer<typeof scheduleStatusSchema>;
 
 export const appCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('generate') }).strict(),
