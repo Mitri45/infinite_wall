@@ -44,7 +44,7 @@ codex login status
 
 ```bash
 cd ~/Downloads
-sudo apt install ./infinite-wall_0.1.2_amd64.deb
+sudo apt install ./infinite-wall_0.1.3_amd64.deb
 infinite-wall
 ```
 
