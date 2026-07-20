@@ -290,10 +290,24 @@ describe('theme selection experience', () => {
       screen.getByRole('heading', { name: 'Where should we go?' }),
     ).toBeTruthy();
 
+    const minimalCardArtwork = document.querySelector(
+      '.theme-card[data-theme="minimal"] .theme-card-artwork',
+    );
+    const detailArtwork = document.querySelector('.direction-artwork');
+    expect(minimalCardArtwork?.getAttribute('src')).toBe(
+      detailArtwork?.getAttribute('src'),
+    );
+
     await user.click(
       screen.getByRole('button', { name: 'Nature — Wild Distance' }),
     );
     expect(screen.getByRole('heading', { name: 'Nature', level: 2 })).toBeTruthy();
+    const natureCardArtwork = document.querySelector(
+      '.theme-card[data-theme="nature"] .theme-card-artwork',
+    );
+    expect(natureCardArtwork?.getAttribute('src')).toBe(
+      document.querySelector('.direction-artwork')?.getAttribute('src'),
+    );
 
     await user.click(screen.getByRole('tab', { name: 'Curated' }));
     const tidalMirror = screen.getByRole('button', { name: /Tidal Mirror/ });

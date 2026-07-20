@@ -534,46 +534,17 @@ h1 {
   background: var(--art);
 }
 
-.theme-card-art svg {
+.theme-card-artwork {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   transition: filter 220ms ease, transform 260ms ease;
 }
 
-.theme-card:hover .theme-card-art svg {
+.theme-card:hover .theme-card-artwork {
   filter: saturate(1.08) contrast(1.03);
   transform: scale(1.025);
-}
-
-.card-shape {
-  position: absolute;
-  border: 1px solid rgb(255 255 255 / 28%);
-  border-radius: 50%;
-  mix-blend-mode: soft-light;
-}
-
-.card-shape-one {
-  top: -35px;
-  right: -12px;
-  width: 116px;
-  height: 116px;
-}
-
-.card-shape-two {
-  bottom: -54px;
-  left: 22%;
-  width: 94px;
-  height: 94px;
-}
-
-.card-shape-three {
-  top: 22px;
-  left: 12%;
-  width: 22px;
-  height: 22px;
-  border-color: rgb(255 255 255 / 42%);
-  background: rgb(255 255 255 / 9%);
 }
 
 .theme-card-copy {
@@ -639,7 +610,26 @@ h1 {
   height: 190px;
   overflow: hidden;
   background: var(--art);
-  transition: background 300ms ease;
+}
+
+.direction-artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: direction-art-in 240ms ease both;
+}
+
+@keyframes direction-art-in {
+  from {
+    opacity: 0.72;
+    transform: scale(1.015);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .wallpaper-preview-frame {
@@ -669,49 +659,6 @@ h1 {
   font-size: 0.58rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.art-orbit,
-.art-core,
-.art-grain {
-  position: absolute;
-}
-
-.art-orbit {
-  border: 1px solid rgb(255 255 255 / 25%);
-  border-radius: 50%;
-}
-
-.art-orbit-one {
-  top: -76px;
-  right: -28px;
-  width: 220px;
-  height: 220px;
-}
-
-.art-orbit-two {
-  bottom: -85px;
-  left: 40px;
-  width: 154px;
-  height: 154px;
-}
-
-.art-core {
-  top: 68px;
-  right: 94px;
-  width: 30px;
-  height: 30px;
-  border: 1px solid rgb(255 255 255 / 48%);
-  border-radius: 50%;
-  background: rgb(255 255 255 / 13%);
-  box-shadow: 0 0 30px rgb(255 255 255 / 15%);
-}
-
-.art-grain {
-  inset: 0;
-  opacity: 0.12;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
 }
 
 .direction-copy {

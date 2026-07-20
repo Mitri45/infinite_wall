@@ -17,6 +17,7 @@ import { getThemePack, THEME_PACKS } from '../shared/themes';
 import { CodexStatus } from './CodexStatus';
 import { ScenePicker, type SelectionMode } from './ScenePicker';
 import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
+import { ThemeArtwork } from './ThemeArtwork';
 import { ThemeCard } from './ThemeCard';
 
 const INITIAL_PROGRESS: GenerationProgress = {
@@ -652,10 +653,11 @@ export function App() {
             </div>
           ) : (
             <div className="direction-art" data-theme={selectedTheme.id} aria-hidden="true">
-              <span className="art-orbit art-orbit-one" />
-              <span className="art-orbit art-orbit-two" />
-              <span className="art-core" />
-              <span className="art-grain" />
+              <ThemeArtwork
+                themeId={selectedTheme.id}
+                className="direction-artwork"
+                eager
+              />
             </div>
           )}
 
