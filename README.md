@@ -18,9 +18,10 @@ Infinite Wall uses the **Codex CLI installed on your computer** and your existin
 Codex sign-in. It does not call the OpenAI Image API directly, does not ask for
 an API key, and does not store one.
 
-The app gives Codex the selected visual direction and your display size. Codex
-creates the image, then Infinite Wall validates it and saves it to the local
-wallpaper library.
+Infinite Wall gives Codex your selected visual direction and display size.
+Codex turns that direction into a final image prompt and generates the wallpaper
+in the same run. Infinite Wall then validates the result and saves it to your
+private local library.
 
 ## Requirements
 
