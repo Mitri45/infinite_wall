@@ -54,14 +54,14 @@ desktop user.
 Debian, Ubuntu, Linux Mint, and related distributions:
 
 ```bash
-sudo apt install ./infinite-wall_0.1.1_amd64.deb
+sudo apt install ./infinite-wall_0.1.2_amd64.deb
 infinite-wall
 ```
 
 Portable archive:
 
 ```bash
-unzip 'Infinite Wall-linux-x64-0.1.1.zip'
+unzip Infinite.Wall-linux-x64-0.1.2.zip
 cd 'Infinite Wall-linux-x64'
 ./infinite-wall
 ```
@@ -75,7 +75,7 @@ pnpm make -- --platform linux --arch x64
 
 Forge writes the `.deb` and portable ZIP under `out/make/`. Pull requests and
 main-branch builds also retain Linux, macOS, and Windows packages as GitHub
-Actions artifacts for 14 days. Pushing a version tag such as `v0.1.0` publishes
+Actions artifacts for 14 days. Pushing a version tag such as `v0.1.2` publishes
 the Linux `.deb`, portable ZIP, and `SHA256SUMS.txt` to GitHub Releases.
 
 ## Architecture and privacy
