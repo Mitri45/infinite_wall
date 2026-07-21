@@ -96,6 +96,7 @@ export function registerIpcHandlers(
         options.onLibraryChanged?.();
       }
     } catch {
+      // Pruning is best-effort housekeeping; a failure never blocks generation.
     }
   };
 
