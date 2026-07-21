@@ -2,6 +2,9 @@ packages:
   - .
 
 # Electron Forge's packager requires a physical, non-symlinked node_modules tree.
+# Note: the root devDependency on lodash is required, not dead code. Without it,
+# lodash is optional-only in the lockfile and the hoisted install on win32 skips
+# it (its other dependents are linux/darwin-only), breaking electron-winstaller.
 nodeLinker: hoisted
 
 # Keep pnpm 11's supply-chain protections explicit for a public repository.
