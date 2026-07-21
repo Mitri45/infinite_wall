@@ -108,6 +108,33 @@ Run the verification suite with:
 pnpm verify
 ```
 
+## Build from source
+
+Building uses the same prerequisites as running from source. Create a
+packaged, runnable app with:
+
+```bash
+pnpm package
+```
+
+The unpacked build is written to out/Infinite Wall-linux-x64/; launch it
+directly with:
+
+```bash
+"./out/Infinite Wall-linux-x64/infinite-wall"
+```
+
+To build the distributable installers (.deb and portable ZIP):
+
+```bash
+pnpm make
+```
+
+Installers land in out/make/, named after the version in package.json.
+Builds target the host platform, so Windows and macOS artifacts must be
+built on those operating systems — the CI workflows in
+.github/workflows/ do this for tagged releases.
+
 ## License
 
 Infinite Wall is open source under the [MIT License](LICENSE).
