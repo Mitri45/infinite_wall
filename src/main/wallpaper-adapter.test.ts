@@ -126,11 +126,13 @@ describe('wallpaper application adapters', () => {
       '-NonInteractive',
       '-Command',
     ]);
-    expect(options.args.at(-1)).toBe(imagePath);
-    expect(options.args.at(-2)).toContain('$imagePath = $args[0]');
-    expect(options.args.at(-2)).toContain("$ErrorActionPreference = 'Stop'");
-    expect(options.args.at(-2)).toContain("throw 'SystemParametersInfo failed'");
-    expect(options.args.at(-2)).not.toContain(imagePath);
+    expect(options.environmentOverrides).toEqual({
+      INFINITE_WALL_IMAGE_PATH: imagePath,
+    });
+    expect(options.args.at(-1)).toContain('$imagePath = $env:INFINITE_WALL_IMAGE_PATH');
+    expect(options.args.at(-1)).toContain("$ErrorActionPreference = 'Stop'");
+    expect(options.args.at(-1)).toContain("throw 'SystemParametersInfo failed'");
+    expect(options.args.join(' ')).not.toContain(imagePath);
   });
 
   it('returns a safe error for unsupported desktops and command failures', async () => {

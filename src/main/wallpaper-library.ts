@@ -308,6 +308,46 @@ export class WallpaperLibrary {
     });
   }
 
+  async prune(
+    limit: number,
+    protectedIds: readonly string[] = [],
+  ): Promise<number> {
+    if (!Number.isInteger(limit) || limit < 1) {
+      return 0;
+    }
+    const protectedIdSet = new Set(protectedIds);
+    return this.#runMutation(async () => {
+      await this.#prepareItemsRoot();
+      const entries = await readdir(this.#itemsRoot, { withFileTypes: true });
+      const items: { directory: string; record: WallpaperRecord }[] = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !identifierSchema.safeParse(entry.name).success) {
+          continue;
+        }
+        const item = await this.#resolveItem(entry.name);
+        if (item) {
+          items.push(item);
+        }
+      }
+
+      const excess = items.length - limit;
+      if (excess <= 0) {
+        return 0;
+      }
+      const removable = items
+        .filter(({ record }) =>
+          !record.favorite && !record.applied && !protectedIdSet.has(record.id),
+        )
+        .sort((left, right) => left.record.createdAt.localeCompare(right.record.createdAt));
+      let removed = 0;
+      for (const item of removable.slice(0, excess)) {
+        await rm(item.directory, { recursive: true, force: true });
+        removed += 1;
+      }
+      return removed;
+    });
+  }
+
   async delete(recordId: string): Promise<boolean> {
     return this.#runMutation(async () => {
       const item = await this.#resolveItem(recordId);

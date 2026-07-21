@@ -68,7 +68,7 @@ const registerContentSecurityPolicy = (): void => {
   });
 };
 
-const createWindow = (): BrowserWindow => {
+const createWindow = (showWhenReady: boolean): BrowserWindow => {
   const applicationIcon = nativeImage.createFromPath(appAssetPath('window-icon.png'));
   const workArea = screen.getPrimaryDisplay().workArea;
   const window = new BrowserWindow({
@@ -89,10 +89,13 @@ const createWindow = (): BrowserWindow => {
     },
   });
   window.setIcon(applicationIcon);
-  window.maximize();
 
   window.once('ready-to-show', () => {
-    window.show();
+    if (showWhenReady) {
+      // maximize() force-shows a hidden window, so it must stay on the show path.
+      window.maximize();
+      window.show();
+    }
   });
   window.on('close', (event) => {
     if (!quitting) {
@@ -135,7 +138,7 @@ const createWindow = (): BrowserWindow => {
 };
 
 const showMainWindow = (): BrowserWindow => {
-  mainWindow ??= createWindow();
+  mainWindow ??= createWindow(true);
   mainWindow.show();
   mainWindow.focus();
   return mainWindow;
@@ -191,7 +194,7 @@ const markRendererReady = (): void => {
 
 const rebuildTrayMenu = (settings?: AppSettings): void => {
   if (!tray || !runtime) return;
-  const scheduleEnabled = settings?.scheduleHours !== null;
+  const scheduleEnabled = settings ? settings.scheduleHours !== null : false;
   tray.setContextMenu(Menu.buildFromTemplate([
     {
       label: 'Generate Current Direction',
@@ -258,7 +261,7 @@ const initializeApplication = async (): Promise<void> => {
     onLibraryChanged: notifyLibraryChanged,
     onRendererReady: markRendererReady,
   });
-  mainWindow = createWindow();
+  mainWindow = createWindow(false);
   const trayImage = nativeImage
     .createFromPath(appAssetPath('tray-icon.png'))
     .resize({ width: 22, height: 22 });
@@ -266,6 +269,8 @@ const initializeApplication = async (): Promise<void> => {
   tray = new Tray(trayImage);
   tray.setToolTip('Infinite Wall');
   tray.on('click', () => showMainWindow());
+  // A fallback menu keeps Open and Quit reachable even if settings never load.
+  rebuildTrayMenu();
   void runtime.getSettings().then(rebuildTrayMenu).catch(() =>
     notify('Infinite Wall', 'Settings could not be loaded.'),
   );

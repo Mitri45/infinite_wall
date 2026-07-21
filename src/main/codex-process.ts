@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { StringDecoder } from 'node:string_decoder';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 const DEFAULT_OUTPUT_LIMIT = 1024 * 1024;
 const FORCE_KILL_DELAY_MS = 1_000;
@@ -83,6 +83,16 @@ export function requiresShell(
   return platform === 'win32' && /\.(?:bat|cmd)$/i.test(command);
 }
 
+export function quoteForCmdShell(value: string): string {
+  if (/[\r\n\0]/.test(value)) {
+    throw new Error('Shell arguments cannot contain control characters.');
+  }
+  const escaped = value
+    .replace(/(\\*)"/g, '$1$1\\"')
+    .replace(/(\\+)$/, '$1$1');
+  return `"${escaped}"`;
+}
+
 export function runCapturedProcess(
   options: CapturedProcessOptions,
 ): Promise<CapturedProcessResult> {
@@ -121,10 +131,15 @@ export function runCapturedProcess(
         environment[key] = value;
       }
     }
-    const shell = requiresShell(options.command)
-      ? environment.COMSPEC ?? true
-      : false;
-    const child = spawn(options.command, [...options.args], {
+    const useShell = requiresShell(options.command);
+    const shell = useShell ? environment.COMSPEC ?? true : false;
+    const command = useShell
+      ? quoteForCmdShell(options.command)
+      : options.command;
+    const args = useShell
+      ? options.args.map(quoteForCmdShell)
+      : [...options.args];
+    const child = spawn(command, args, {
       cwd: options.cwd,
       env: environment,
       shell,

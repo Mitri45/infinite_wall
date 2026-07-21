@@ -5,15 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { GenerationRequest } from '../shared/contracts';
 import { GenerationJobRunner } from './generation-job-runner';
+import type { GenerationJobRequest } from './generation-prompt';
 
 const fakeCodexPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../test/fixtures/fake-codex.mjs',
 );
 const temporaryRoots: string[] = [];
-const request: GenerationRequest = {
+const request: GenerationJobRequest = {
   themeId: 'minimal',
   mode: 'infinite',
   display: { width: 1920, height: 1080 },
@@ -80,8 +80,15 @@ describe('GenerationJobRunner', () => {
     await expect(runner.removeCompletedJob('/tmp/outside.png')).rejects.toThrow();
   });
 
+  it('tolerates non-JSON stdout lines when the structured result is valid', async () => {
+    const { runner } = await createRunner('malformed-jsonl');
+
+    await expect(runner.run(request)).resolves.toMatchObject({
+      title: 'Quiet Geometry',
+    });
+  });
+
   it.each([
-    ['malformed-jsonl', 'malformed-output'],
     ['malformed-output', 'malformed-output'],
     ['missing-image', 'missing-image'],
     ['outside', 'outside-job-directory'],

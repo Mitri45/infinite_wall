@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GenerationRequest } from '../shared/contracts';
-import { buildGenerationPrompt } from './generation-prompt';
+import {
+  buildGenerationPrompt,
+  type GenerationJobRequest,
+} from './generation-prompt';
 
 describe('buildGenerationPrompt', () => {
   it('includes display constraints and recent-concept exclusions', () => {
-    const request: GenerationRequest = {
+    const request: GenerationJobRequest = {
       themeId: 'minimal',
       mode: 'infinite',
       display: { width: 3440, height: 1440 },
@@ -22,7 +24,7 @@ describe('buildGenerationPrompt', () => {
   });
 
   it('rejects a curated scene that does not belong to the selected theme', () => {
-    const request: GenerationRequest = {
+    const request: GenerationJobRequest = {
       themeId: 'minimal',
       mode: 'curated',
       sceneId: 'enchanted-library',

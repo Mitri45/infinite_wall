@@ -169,6 +169,31 @@ describe('WallpaperLibrary', () => {
     await expect(library.resolveImage(applied.record.id)).resolves.not.toBeNull();
   });
 
+  it('prunes oldest non-favorite, non-applied records past the limit', async () => {
+    const { library, generation } = await createLibrary();
+    const first = await library.importGeneration(generation);
+    const favorite = await library.importGeneration(generation);
+    const applied = await library.importGeneration(generation);
+    const fourth = await library.importGeneration(generation);
+    await library.setFavorite(favorite.record.id, true);
+    await library.markApplied(applied.record.id);
+
+    await expect(library.prune(2)).resolves.toBe(2);
+
+    const remaining = (await library.list()).map((item) => item.record.id).sort();
+    expect(remaining).toEqual([applied.record.id, favorite.record.id].sort());
+    expect(remaining).not.toContain(first.record.id);
+    expect(remaining).not.toContain(fourth.record.id);
+
+    await expect(library.prune(1)).resolves.toBe(0);
+    await expect(library.list()).resolves.toHaveLength(2);
+    await expect(library.prune(0.5)).resolves.toBe(0);
+
+    const fresh = await library.importGeneration(generation);
+    await expect(library.prune(2, [fresh.record.id])).resolves.toBe(0);
+    await expect(library.resolveImage(fresh.record.id)).resolves.not.toBeNull();
+  });
+
   it('refuses to mutate or delete a symlinked record outside the library', async () => {
     const { library, root, generation } = await createLibrary();
     await library.importGeneration(generation);

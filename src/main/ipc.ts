@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  appSettingsPatchSchema,
   generationRequestSchema,
   identifierSchema,
-  appSettingsPatchSchema,
   THEME_IDS,
   type AppSettings,
   type AppSettingsPatch,
@@ -17,9 +17,9 @@ import {
   type WallpaperRecord,
 } from '../shared/contracts';
 import { IPC_CHANNELS } from '../shared/ipc';
+import { resolveCodexCommand } from './codex-command';
 import { CodexDiagnosticsService } from './codex-diagnostics';
 import { assertCodexReadyForGeneration } from './codex-readiness';
-import { resolveCodexCommand } from './codex-command';
 import { physicalDisplayDimensions } from './display-dimensions';
 import {
   GenerationJobError,
@@ -27,17 +27,17 @@ import {
 } from './generation-job-runner';
 import { GenerationService } from './generation-service';
 import { GenerationSessionController } from './generation-session';
-import {
-  WallpaperLibrary,
-  WallpaperLibraryError,
-} from './wallpaper-library';
+import { ScheduleController } from './schedule-controller';
+import { SettingsStore } from './settings-store';
 import {
   createWallpaperAdapter,
   WallpaperAdapterError,
 } from './wallpaper-adapter';
+import {
+  WallpaperLibrary,
+  WallpaperLibraryError,
+} from './wallpaper-library';
 import { WallpaperService } from './wallpaper-service';
-import { SettingsStore } from './settings-store';
-import { ScheduleController } from './schedule-controller';
 
 interface RegisterIpcHandlersOptions {
   readonly jobRoot: string;
@@ -88,6 +88,16 @@ export function registerIpcHandlers(
     adapter: createWallpaperAdapter(),
   });
   const settingsStore = new SettingsStore(options.settingsRoot);
+  const pruneLibrary = async (freshRecordId: string): Promise<void> => {
+    try {
+      const settings = await settingsStore.load();
+      const removed = await library.prune(settings.libraryLimit, [freshRecordId]);
+      if (removed > 0) {
+        options.onLibraryChanged?.();
+      }
+    } catch {
+    }
+  };
 
   let runtimeDisposing = false;
   let scheduledRunActive = false;
@@ -113,7 +123,6 @@ export function registerIpcHandlers(
             themeId,
             display: physicalDisplayDimensions(screen.getPrimaryDisplay()),
             quality: settings.quality,
-            recentConcepts: [],
           },
           controller.signal,
         );
@@ -122,6 +131,7 @@ export function registerIpcHandlers(
         } finally {
           options.onLibraryChanged?.();
         }
+        await pruneLibrary(preview.record.id);
       } finally {
         generationSessions.finish(controller);
       }
@@ -239,6 +249,7 @@ export function registerIpcHandlers(
           controller.signal,
           sendProgress,
         );
+        await pruneLibrary(preview.record.id);
         return {
           ok: true,
           value: preview,

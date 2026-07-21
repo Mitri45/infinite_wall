@@ -22,7 +22,10 @@ import {
 } from '../shared/contracts';
 import { resolveCodexCommand } from './codex-command';
 import { runCapturedProcess } from './codex-process';
-import { buildGenerationPrompt } from './generation-prompt';
+import {
+  buildGenerationPrompt,
+  type GenerationJobRequest,
+} from './generation-prompt';
 import { verifiedImageMime } from './image-file';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
@@ -101,7 +104,7 @@ export class GenerationJobRunner {
   }
 
   async run(
-    request: GenerationRequest,
+    request: GenerationJobRequest,
     signal?: AbortSignal,
     onProgress?: GenerationProgressReporter,
   ): Promise<GenerationResult> {
@@ -173,7 +176,6 @@ export class GenerationJobRunner {
       });
 
       assertProcessSucceeded(processResult);
-      parseJsonLines(processResult.stdout);
       reportProgress(onProgress, {
         phase: 'validating',
         message: 'Checking the generated image and metadata…',
@@ -456,24 +458,6 @@ function classifyProcessFailure(output: string): GenerationJobError {
     'Codex could not complete the wallpaper generation.',
     true,
   );
-}
-
-function parseJsonLines(stdout: string): void {
-  for (const line of stdout.split(/\r?\n/)) {
-    if (line.trim().length === 0) {
-      continue;
-    }
-
-    try {
-      JSON.parse(line);
-    } catch {
-      throw new GenerationJobError(
-        'malformed-output',
-        'Codex returned malformed progress data.',
-        false,
-      );
-    }
-  }
 }
 
 function parseStructuredResult(resultText: string) {

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   createSanitizedEnvironment,
+  quoteForCmdShell,
   requiresShell,
   runCapturedProcess,
 } from './codex-process';
@@ -88,5 +89,19 @@ describe('runCapturedProcess', () => {
     expect(requiresShell('C:\\Users\\test\\codex.cmd', 'win32')).toBe(true);
     expect(requiresShell('C:\\Users\\test\\codex.exe', 'win32')).toBe(false);
     expect(requiresShell('/usr/local/bin/codex.cmd', 'linux')).toBe(false);
+  });
+
+  it('quotes shell-mode arguments so paths with spaces survive cmd.exe', () => {
+    expect(quoteForCmdShell('C:\\Users\\First Last\\AppData\\Roaming\\npm\\codex.cmd')).toBe(
+      '"C:\\Users\\First Last\\AppData\\Roaming\\npm\\codex.cmd"',
+    );
+    expect(quoteForCmdShell('--output-schema')).toBe('"--output-schema"');
+    expect(quoteForCmdShell('C:\\Infinite Wall\\jobs\\')).toBe(
+      '"C:\\Infinite Wall\\jobs\\\\"',
+    );
+    expect(quoteForCmdShell('say "hi"')).toBe('"say \\"hi\\""');
+    expect(() => quoteForCmdShell('bad\nvalue')).toThrow(
+      'control characters',
+    );
   });
 });

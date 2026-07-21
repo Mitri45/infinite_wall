@@ -20,7 +20,6 @@ const request: GenerationRequest = {
   mode: 'infinite',
   display: { width: 1920, height: 1080 },
   quality: 'standard',
-  recentConcepts: [],
 };
 
 afterEach(async () => {

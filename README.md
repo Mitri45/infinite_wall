@@ -6,13 +6,13 @@ keeps them in a private local library, and applies them to your desktop.
 ## OpenAI Build Week submission
 
 Infinite Wall was created during OpenAI Build Week, with
-Codex jugling two distinct roles: it collaborated with me throughout product
+Codex juggling two distinct roles: it collaborated with me throughout product
 development, and it is the runtime engine that powers the art generation.
 
 ### How I collaborated with Codex
 
 Codex (GPT 5.6 Sol) was used from the very start planning phase of the project to packaged desktop
-application. It helped turn the initial direction into desctop app architecture, prototype and refine the interface, implement the
+application. It helped turn the initial direction into desktop app architecture, prototype and refine the interface, implement the
 generation, library, scheduling, and tray workflows with decent test coverage. Additionally Codex Code Review was used on each PR to make sure the quality of the application stays sharp.
 
 ### How Codex and GPT contribute to the result

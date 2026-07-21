@@ -169,14 +169,18 @@ class WindowsWallpaperAdapter implements WallpaperAdapter {
 
   async apply(imagePath: string): Promise<void> {
     assertAbsoluteImagePath(imagePath, path.win32);
-    await runChecked(this.#runProcess, 'powershell.exe', [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      WINDOWS_APPLY_SCRIPT,
-      imagePath,
-    ]);
+    await runChecked(
+      this.#runProcess,
+      'powershell.exe',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        WINDOWS_APPLY_SCRIPT,
+      ],
+      { INFINITE_WALL_IMAGE_PATH: imagePath },
+    );
   }
 }
 
@@ -190,7 +194,8 @@ class UnsupportedWallpaperAdapter implements WallpaperAdapter {
 
 const WINDOWS_APPLY_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
-  '$imagePath = $args[0]',
+  '$imagePath = $env:INFINITE_WALL_IMAGE_PATH',
+  "if ([string]::IsNullOrEmpty($imagePath)) { throw 'Missing wallpaper path' }",
   "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -Value $imagePath -ErrorAction Stop",
   "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class NativeWallpaper { [DllImport(\"user32.dll\", CharSet=CharSet.Unicode)] public static extern bool SystemParametersInfo(int action, int parameter, string value, int flags); }'",
   "if (-not [NativeWallpaper]::SystemParametersInfo(20, 0, $imagePath, 3)) { throw 'SystemParametersInfo failed' }",

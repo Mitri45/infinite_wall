@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { APP_NAME, CODEX_SETUP_URL } from '../shared/app-info';
 import type {
-  CodexDiagnostics,
   AppSettings,
   AppSettingsPatch,
+  CodexDiagnostics,
   GenerationProgress,
   GenerationRequest,
   PublicAppError,
@@ -306,7 +306,6 @@ export function App() {
         themeId: themeOverride ?? selectedThemeId,
         display,
         quality: settings.quality,
-        recentConcepts: [],
       };
       if (themeOverride) return { ...base, mode: 'infinite' };
       if (mode === 'curated') {
@@ -326,7 +325,7 @@ export function App() {
     }
     generationActiveRef.current = true;
     try {
-      const diagnostics = codexDiagnostics ?? await checkCodex();
+      const diagnostics = await checkCodex();
       if (!diagnostics?.authenticated) {
         setGenerationError({
           code: 'not-authenticated',
@@ -364,7 +363,7 @@ export function App() {
       setGenerating(false);
       setCancelling(false);
     }
-  }, [buildRequest, checkCodex, codexDiagnostics, refreshLibrary]);
+  }, [buildRequest, checkCodex, refreshLibrary]);
 
   const activeGenerationStage = generationStageIndex(progress.phase);
   const generationElapsedSeconds = generationStartedAt === null
@@ -546,7 +545,7 @@ export function App() {
     if (!codexDiagnostics.authenticated) {
       return codexDiagnostics.message;
     }
-    if (scheduleRunning) {
+    if (scheduleRunning || scheduleStatus.state === 'running') {
       return 'A scheduled wallpaper is already being generated.';
     }
     if (mode === 'custom' && customPrompt.trim().length < 3) {

@@ -1,7 +1,11 @@
 import type { GenerationRequest } from '../shared/contracts';
 import { getThemePack } from '../shared/themes';
 
-export function buildGenerationPrompt(request: GenerationRequest): string {
+export type GenerationJobRequest = GenerationRequest & {
+  readonly recentConcepts: readonly string[];
+};
+
+export function buildGenerationPrompt(request: GenerationJobRequest): string {
   const theme = getThemePack(request.themeId);
   const direction = getDirection(request);
   const recentConcepts =

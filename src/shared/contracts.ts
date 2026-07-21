@@ -67,7 +67,6 @@ const generationRequestBase = {
   themeId: themeIdSchema,
   display: displayDimensionsSchema,
   quality: z.enum(['standard', 'high']),
-  recentConcepts: z.array(z.string().min(3).max(240)).max(20),
 };
 
 export const generationRequestSchema = z.discriminatedUnion('mode', [
