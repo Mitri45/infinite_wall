@@ -132,8 +132,26 @@ pnpm make
 
 Installers land in out/make/, named after the version in package.json.
 Builds target the host platform, so Windows and macOS artifacts must be
-built on those operating systems — the CI workflows in
-.github/workflows/ do this for tagged releases.
+built on those operating systems. The CI workflow packages Linux x64,
+Windows x64, and both macOS x64 and arm64 artifacts.
+
+On macOS, packaging compiles the bundled AppKit wallpaper helper and generates
+the native `.icns` application icon before Electron Forge signs the bundle.
+Ordinary CI packaging remains unsigned so pull requests do not receive release
+credentials. Tagged releases require these GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE_P12_BASE64`
+- `MACOS_CERTIFICATE_PASSWORD`
+- `MACOS_KEYCHAIN_PASSWORD`
+- `APPLE_API_KEY_P8_BASE64`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_ISSUER`
+- `MACOS_SIGN_IDENTITY` (optional when the Developer ID identity is unambiguous)
+
+The release workflow imports the Developer ID certificate into an ephemeral
+keychain, signs the app and bundled helper with hardened runtime, notarizes the
+app, verifies it with `codesign`, Gatekeeper, and `stapler`, then publishes
+separate x64 and arm64 DMG and ZIP assets alongside the Linux release.
 
 ## License
 
