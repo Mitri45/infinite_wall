@@ -97,18 +97,75 @@ describe('wallpaper application adapters', () => {
     expect(runProcess.mock.calls.some(([options]) => options.args.includes('picture-uri-dark') && options.args[0] === 'set')).toBe(false);
   });
 
-  it('passes macOS paths separately from the fixed AppleScript', async () => {
-    const runProcess = vi.fn<WallpaperProcessRunner>(async () => SUCCESS);
-    const adapter = createWallpaperAdapter({ platform: 'darwin', runProcess });
+  it('passes macOS paths directly to the bundled native helper', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => ({
+      ...SUCCESS,
+      stdout: '{"ok":true,"displayCount":2}\n',
+    }));
+    const adapter = createWallpaperAdapter({
+      platform: 'darwin',
+      macOsHelperPath: '/Applications/Infinite Wall.app/Contents/Resources/InfiniteWallWallpaperHelper',
+      runProcess,
+    });
     const imagePath = '/Users/alice/Pictures/wall;$(unsafe).png';
 
     await adapter.apply(imagePath);
 
-    const options = runProcess.mock.calls[0][0];
-    expect(options.command).toBe('osascript');
-    expect(options.args.at(-1)).toBe(imagePath);
-    expect(options.args.at(-2)).toBe('--');
-    expect(options.args.slice(0, -1).join(' ')).not.toContain(imagePath);
+    expect(runProcess).toHaveBeenCalledWith({
+      command: '/Applications/Infinite Wall.app/Contents/Resources/InfiniteWallWallpaperHelper',
+      args: [imagePath],
+      timeoutMs: 15_000,
+      maxOutputBytes: 65_536,
+    });
+  });
+
+  it('preserves structured NSError details from the macOS helper', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => ({
+      ...SUCCESS,
+      exitCode: 1,
+      stderr: JSON.stringify({
+        ok: false,
+        domain: 'NSCocoaErrorDomain',
+        code: 513,
+        description: 'You do not have permission to save the file.',
+        failureReason: 'The file is locked.',
+        displayIndex: 2,
+        displayName: 'Studio Display',
+        completedDisplayCount: 1,
+        totalDisplayCount: 2,
+      }),
+    }));
+    const adapter = createWallpaperAdapter({
+      platform: 'darwin',
+      macOsHelperPath: '/tmp/InfiniteWallWallpaperHelper',
+      runProcess,
+    });
+
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toMatchObject({
+      message:
+        'macOS could not apply this wallpaper on Studio Display: You do not have permission to save the file. (NSCocoaErrorDomain 513).',
+      details: {
+        domain: 'NSCocoaErrorDomain',
+        code: 513,
+        failureReason: 'The file is locked.',
+        displayIndex: 2,
+        completedDisplayCount: 1,
+        totalDisplayCount: 2,
+      },
+    });
+  });
+
+  it('rejects a successful macOS helper process with an invalid response', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => SUCCESS);
+    const adapter = createWallpaperAdapter({
+      platform: 'darwin',
+      macOsHelperPath: '/tmp/InfiniteWallWallpaperHelper',
+      runProcess,
+    });
+
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toThrow(
+      'returned an invalid response',
+    );
   });
 
   it('passes Windows paths as data to a fixed PowerShell command', async () => {
