@@ -28,10 +28,25 @@ export interface WallpaperAdapterOptions {
   readonly platform?: NodeJS.Platform;
   readonly environment?: NodeJS.ProcessEnv;
   readonly runProcess?: WallpaperProcessRunner;
+  readonly macOsHelperPath?: string;
+}
+
+export interface WallpaperAdapterErrorDetails {
+  readonly domain: string;
+  readonly code: number;
+  readonly description: string;
+  readonly failureReason?: string;
+  readonly displayIndex?: number;
+  readonly displayName?: string;
+  readonly completedDisplayCount: number;
+  readonly totalDisplayCount: number;
 }
 
 export class WallpaperAdapterError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly details?: WallpaperAdapterErrorDetails,
+  ) {
     super(message);
     this.name = 'WallpaperAdapterError';
   }
@@ -50,7 +65,10 @@ export function createWallpaperAdapter(
         runProcess,
       );
     case 'darwin':
-      return new MacOsWallpaperAdapter(runProcess);
+      return new MacOsWallpaperAdapter(
+        options.macOsHelperPath ?? 'InfiniteWallWallpaperHelper',
+        runProcess,
+      );
     case 'win32':
       return new WindowsWallpaperAdapter(runProcess);
     default:
@@ -137,26 +155,45 @@ class LinuxWallpaperAdapter implements WallpaperAdapter {
 }
 
 class MacOsWallpaperAdapter implements WallpaperAdapter {
+  readonly #helperPath: string;
   readonly #runProcess: WallpaperProcessRunner;
 
-  constructor(runProcess: WallpaperProcessRunner) {
+  constructor(
+    helperPath: string,
+    runProcess: WallpaperProcessRunner,
+  ) {
+    this.#helperPath = helperPath;
     this.#runProcess = runProcess;
   }
 
   async apply(imagePath: string): Promise<void> {
     assertAbsoluteImagePath(imagePath, path.posix);
-    await runChecked(this.#runProcess, 'osascript', [
-      '-e',
-      'on run argv',
-      '-e',
-      'set imagePath to item 1 of argv',
-      '-e',
-      'tell application "System Events" to tell every desktop to set picture to imagePath',
-      '-e',
-      'end run',
-      '--',
-      imagePath,
-    ]);
+    const result = await this.#runProcess({
+      command: this.#helperPath,
+      args: [imagePath],
+      timeoutMs: APPLY_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+    });
+    if (
+      result.exitCode !== 0 ||
+      result.spawnError ||
+      result.timedOut ||
+      result.aborted ||
+      result.overflowed
+    ) {
+      const details = parseMacOsHelperFailure(result.stderr);
+      throw new WallpaperAdapterError(
+        details
+          ? macOsHelperErrorMessage(details)
+          : 'macOS could not apply this wallpaper.',
+        details,
+      );
+    }
+    if (!isMacOsHelperSuccess(result.stdout)) {
+      throw new WallpaperAdapterError(
+        'The macOS wallpaper helper returned an invalid response.',
+      );
+    }
   }
 }
 
@@ -208,6 +245,97 @@ function assertAbsoluteImagePath(
   if (!pathApi.isAbsolute(imagePath)) {
     throw new WallpaperAdapterError('The wallpaper image path is invalid.');
   }
+}
+
+function parseMacOsHelperFailure(
+  stderr: string,
+): WallpaperAdapterErrorDetails | undefined {
+  const line = stderr
+    .split(/\r?\n/)
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (!line) {
+    return undefined;
+  }
+  try {
+    const value: unknown = JSON.parse(line);
+    if (!isObject(value) || value.ok !== false) {
+      return undefined;
+    }
+    if (
+      typeof value.domain !== 'string' ||
+      typeof value.code !== 'number' ||
+      typeof value.description !== 'string' ||
+      typeof value.completedDisplayCount !== 'number' ||
+      typeof value.totalDisplayCount !== 'number'
+    ) {
+      return undefined;
+    }
+    return {
+      domain: cleanHelperText(value.domain),
+      code: value.code,
+      description: cleanHelperText(value.description),
+      ...(typeof value.failureReason === 'string'
+        ? { failureReason: cleanHelperText(value.failureReason) }
+        : {}),
+      ...(typeof value.displayIndex === 'number'
+        ? { displayIndex: value.displayIndex }
+        : {}),
+      ...(typeof value.displayName === 'string'
+        ? { displayName: cleanHelperText(value.displayName) }
+        : {}),
+      completedDisplayCount: value.completedDisplayCount,
+      totalDisplayCount: value.totalDisplayCount,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isMacOsHelperSuccess(stdout: string): boolean {
+  const line = stdout
+    .split(/\r?\n/)
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (!line) {
+    return false;
+  }
+  try {
+    const value: unknown = JSON.parse(line);
+    return (
+      isObject(value) &&
+      value.ok === true &&
+      typeof value.displayCount === 'number' &&
+      Number.isInteger(value.displayCount) &&
+      value.displayCount > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function cleanHelperText(value: string): string {
+  return Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127 ? ' ' : character;
+  }).join('').trim().slice(0, 500);
+}
+
+function macOsHelperErrorMessage(
+  details: WallpaperAdapterErrorDetails,
+): string {
+  const display = details.displayName
+    ? ` on ${details.displayName}`
+    : details.displayIndex
+      ? ` on display ${details.displayIndex}`
+      : '';
+  return `macOS could not apply this wallpaper${display}: ${details.description} (${details.domain} ${details.code}).`;
 }
 
 async function runChecked(
