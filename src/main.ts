@@ -46,6 +46,10 @@ const appAssetPath = (filename: string): string => path.join(
   'assets',
   filename,
 );
+const macOsWallpaperHelperPath = (): string => path.join(
+  app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), '.build', 'macos'),
+  'InfiniteWallWallpaperHelper',
+);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -254,6 +258,7 @@ const initializeApplication = async (): Promise<void> => {
     jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
     libraryRoot: path.join(app.getPath('userData'), 'library'),
     settingsRoot: path.join(app.getPath('userData'), 'preferences'),
+    macOsWallpaperHelperPath: macOsWallpaperHelperPath(),
     setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
     notify,
     onSettingsChanged: notifySettingsChanged,
