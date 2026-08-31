@@ -74,6 +74,21 @@ describe('WallpaperService', () => {
     await disposal;
     expect(disposed).toBe(true);
   });
+
+  it('does not mark a library item applied when an OS adapter fails', async () => {
+    const { library, firstId } = await createLibraryWithTwoItems();
+    const adapter: WallpaperAdapter = {
+      apply: () => Promise.reject(new Error('display 2 failed')),
+    };
+    const service = new WallpaperService({ library, adapter });
+
+    await expect(service.apply(firstId)).rejects.toThrow('display 2 failed');
+
+    const item = (await library.list()).find(
+      (candidate) => candidate.record.id === firstId,
+    );
+    expect(item?.record.applied).toBe(false);
+  });
 });
 
 async function createLibraryWithTwoItems() {

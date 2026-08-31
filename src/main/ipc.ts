@@ -43,6 +43,7 @@ interface RegisterIpcHandlersOptions {
   readonly jobRoot: string;
   readonly libraryRoot: string;
   readonly settingsRoot: string;
+  readonly macOsWallpaperHelperPath?: string;
   readonly setLaunchAtLogin: (enabled: boolean) => Promise<void>;
   readonly notify: (title: string, body: string) => void;
   readonly onSettingsChanged?: (settings: AppSettings) => void;
@@ -85,7 +86,9 @@ export function registerIpcHandlers(
   const generationSessions = new GenerationSessionController();
   const wallpaperService = new WallpaperService({
     library,
-    adapter: createWallpaperAdapter(),
+    adapter: createWallpaperAdapter({
+      macOsHelperPath: options.macOsWallpaperHelperPath,
+    }),
   });
   const settingsStore = new SettingsStore(options.settingsRoot);
   const pruneLibrary = async (freshRecordId: string): Promise<void> => {

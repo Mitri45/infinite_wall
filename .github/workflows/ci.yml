@@ -50,12 +50,19 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
+            arch: x64
             label: Linux
           - os: macos-latest
             platform: darwin
-            label: macOS
+            arch: x64
+            label: macOS x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            label: macOS arm64
           - os: windows-latest
             platform: win32
+            arch: x64
             label: Windows
     steps:
       - name: Check out repository
@@ -77,11 +84,11 @@ jobs:
       - name: Run platform verification
         run: pnpm verify
       - name: Build installers
-        run: pnpm make -- --platform ${{ matrix.platform }} --arch x64
+        run: pnpm make -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: infinite-wall-${{ matrix.platform }}-x64
+          name: infinite-wall-${{ matrix.platform }}-${{ matrix.arch }}
           path: out/make/**
           if-no-files-found: error
           retention-days: 14

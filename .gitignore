@@ -3,6 +3,7 @@ node_modules/
 
 # Electron Forge / Vite output
 .vite/
+.build/
 out/
 
 # Tests and coverage
