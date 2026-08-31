@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -88,6 +88,46 @@ describe('WallpaperService', () => {
       (candidate) => candidate.record.id === firstId,
     );
     expect(item?.record.applied).toBe(false);
+  });
+
+  it('dispatches live records to the Wallloop adapter and preserves their fallback path', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-live-service-'));
+    temporaryRoots.push(root);
+    const sourceImage = path.join(root, 'source.png');
+    await writeFile(sourceImage, fakePngBytes);
+    const bundlePath = path.join(root, 'live-bundle');
+    await mkdir(bundlePath);
+    const library = new WallpaperLibrary({
+      root: path.join(root, 'library'),
+      inspectImage: async () => ({ width: 1920, height: 1080 }),
+    });
+    const live = await library.importLiveBundle(
+      {
+        imagePath: sourceImage,
+        finalPrompt: 'A quiet geometric landscape composed for a wide desktop wallpaper.',
+        title: 'Quiet Geometry',
+        themeId: 'minimal',
+        sceneSummary: 'A restrained geometric landscape with ample negative space.',
+        durationMs: 1_200,
+      },
+      bundlePath,
+    );
+    const apply = vi.fn(async () => undefined);
+    const applyLiveBundle = vi.fn(async () => undefined);
+    const service = new WallpaperService({
+      library,
+      adapter: { apply, applyLiveBundle },
+    });
+
+    const applied = await service.apply(live.record.id);
+
+    expect(applyLiveBundle).toHaveBeenCalledWith(
+      bundlePath,
+      expect.stringContaining(path.join('items', live.record.id, 'wallpaper.png')),
+    );
+    expect(apply).not.toHaveBeenCalled();
+    expect(applied.kind).toBe('live-bundle');
+    expect(applied.applied).toBe(true);
   });
 });
 

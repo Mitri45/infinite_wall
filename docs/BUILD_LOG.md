@@ -196,3 +196,30 @@ owner. Codex authored the initial project scaffold and verification setup.
   Wall's MIT notice exactly once.
 - Reinstalled the corrected `.deb`, verified its packaged copyright file, and
   completed a production dependency audit with no known vulnerabilities.
+
+## 2026-08-31 — Optional Wallloop local integration
+
+- Added a Linux/Cinnamon Wallloop adapter that invokes only the short-lived
+  `wallloopctl` boundary; Electron is not required while a live bundle plays.
+- Extended durable wallpaper records with `kind: static-image | live-bundle`;
+  records written by earlier versions parse as static images and are migrated
+  safely when read.
+- Kept native Cinnamon/gsettings fallback for an unavailable Wallloop daemon,
+  while surfacing available-but-broken, timed-out, or malformed transactions.
+- Automated tests cover exact command arguments, static/live dispatch,
+  migration, fallback, and failure boundaries.
+- Ran the packaged Linux production path from
+  `/home/dima/dev/infinite_wall/out/Infinite Wall-linux-x64/infinite-wall`.
+  The preload invoked `listWallpapers` and `applyWallpaper` for record
+  `8bded256-423d-4beb-a802-4d05232a5d6f`, **The Condensation Line**; apply
+  returned `ok=true` and `applied=true`.
+- Wallloop was static with `wallpaperId: file-0f211949c4d3e0d8307d`,
+  `leases: []`, `rendererPid: null`, and `ownsGpuContext: false`; Cinnamon
+  pointed to
+  `file:///home/dima/.local/share/wallloop/library/file-0f211949c4d3e0d8307d/fallback.png`.
+  After the entire Electron process tree exited, the exact controller wallpaper
+  ID and Cinnamon URI remained unchanged.
+- The owner subsequently confirmed the Cinnamon visual/interaction checks:
+  correct wallpaper fit, usable desktop icons, a working right-click desktop
+  menu, and unaffected workspace switching. M5 is fully accepted; this
+  owner-attended judgment remains distinct from automated test evidence.

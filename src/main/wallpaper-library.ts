@@ -41,6 +41,14 @@ export class WallpaperLibraryError extends Error {
   }
 }
 
+export interface WallpaperAsset {
+  readonly record: WallpaperRecord;
+  /** The static image used by Cinnamon and as a live-bundle fallback. */
+  readonly imagePath: string;
+  /** Present only for records that dispatch to a Wallloop live bundle. */
+  readonly bundlePath?: string;
+}
+
 export class WallpaperLibrary {
   readonly #root: string;
   readonly #itemsRoot: string;
@@ -204,6 +212,37 @@ export class WallpaperLibrary {
       : null;
   }
 
+  async resolveBundle(recordId: string): Promise<string | null> {
+    const item = await this.#resolveItem(recordId);
+    if (!item || item.record.kind !== 'live-bundle' || !item.record.bundlePath) {
+      return null;
+    }
+    const candidate = path.isAbsolute(item.record.bundlePath)
+      ? path.resolve(item.record.bundlePath)
+      : path.resolve(item.directory, item.record.bundlePath);
+    const resolved = await realpath(candidate).catch(() => null);
+    if (!resolved || !(await stat(resolved).catch(() => null))?.isDirectory()) {
+      return null;
+    }
+    return resolved;
+  }
+
+  async resolveAsset(recordId: string): Promise<WallpaperAsset | null> {
+    const item = await this.#resolveItem(recordId);
+    if (!item) {
+      return null;
+    }
+    const imagePath = await this.resolveImage(recordId);
+    if (!imagePath) {
+      return null;
+    }
+    if (item.record.kind !== 'live-bundle') {
+      return { record: item.record, imagePath };
+    }
+    const bundlePath = await this.resolveBundle(recordId);
+    return bundlePath ? { record: item.record, imagePath, bundlePath } : null;
+  }
+
   async getRecentConcepts(limit = 20): Promise<string[]> {
     const [resolvedRoot, resolvedItemsRoot] = await Promise.all([
       realpath(this.#root).catch(() => null),
@@ -244,15 +283,13 @@ export class WallpaperLibrary {
               entry.isDirectory() && identifierSchema.safeParse(entry.name).success,
           )
           .map(async (entry) => {
-            const record = await readRecord(path.join(this.#itemsRoot, entry.name));
-            if (
-              !record ||
-              record.id !== entry.name ||
-              !(await this.resolveImage(record.id))
-            ) {
+            // #resolveItem verifies realpath confinement before migrating a
+            // legacy record, so a symlink cannot cause a write outside items/.
+            const item = await this.#resolveItem(entry.name);
+            if (!item || !(await this.resolveImage(item.record.id))) {
               return null;
             }
-            return record;
+            return item.record;
           }),
       )
     ).filter((record): record is WallpaperRecord => record !== null);
@@ -364,6 +401,34 @@ export class WallpaperLibrary {
     });
   }
 
+  /**
+   * Import a live Wallloop bundle while retaining the supplied image as its
+   * validated static fallback.  Wallloop remains responsible for validating
+   * the bundle manifest; this library only records the local path and keeps
+   * the normal atomic image import boundary.
+   */
+  async importLiveBundle(
+    result: GenerationResult,
+    bundlePath: string,
+  ): Promise<WallpaperPreview> {
+    const resolvedBundle = await realpath(path.resolve(bundlePath)).catch(() => null);
+    if (!resolvedBundle || !(await stat(resolvedBundle).catch(() => null))?.isDirectory()) {
+      throw new WallpaperLibraryError('The live wallpaper bundle is not available.');
+    }
+    const preview = await this.importGeneration(result);
+    const item = await this.#resolveItem(preview.record.id);
+    if (!item) {
+      throw new WallpaperLibraryError('The imported live wallpaper could not be found.');
+    }
+    const record = wallpaperRecordSchema.parse({
+      ...item.record,
+      kind: 'live-bundle',
+      bundlePath: resolvedBundle,
+    });
+    await writeRecordAtomically(item.directory, record);
+    return { ...preview, record };
+  }
+
   async #resolveItem(
     recordId: string,
   ): Promise<{ readonly directory: string; readonly record: WallpaperRecord } | null> {
@@ -384,7 +449,7 @@ export class WallpaperLibrary {
     ) {
       return null;
     }
-    const record = await readRecord(resolvedDirectory);
+    const record = await readRecord(resolvedDirectory, true);
     return record?.id === parsedId.data
       ? { directory: resolvedDirectory, record }
       : null;
@@ -416,18 +481,35 @@ function previewUrlFor(recordId: string): string {
   return `infinite-wall-media://wallpaper/${recordId}`;
 }
 
-async function readRecord(itemDirectory: string): Promise<WallpaperRecord | null> {
+async function readRecord(
+  itemDirectory: string,
+  migrateLegacy = false,
+): Promise<WallpaperRecord | null> {
   const text = await readFile(path.join(itemDirectory, METADATA_FILENAME), 'utf8').catch(
     () => null,
   );
   if (!text) {
     return null;
   }
+  let raw: unknown;
+  let record: WallpaperRecord;
   try {
-    return wallpaperRecordSchema.parse(JSON.parse(text));
+    raw = JSON.parse(text);
+    record = wallpaperRecordSchema.parse(raw);
   } catch {
     return null;
   }
+  if (
+    migrateLegacy &&
+    typeof raw === 'object' &&
+    raw !== null &&
+    !Object.prototype.hasOwnProperty.call(raw, 'kind')
+  ) {
+    // Parsing remains backward-compatible even if a read-only profile cannot
+    // persist the additive migration immediately.
+    await writeRecordAtomically(itemDirectory, record).catch(() => undefined);
+  }
+  return record;
 }
 
 async function writeRecordAtomically(

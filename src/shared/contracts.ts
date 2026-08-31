@@ -193,10 +193,19 @@ export type OperationResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: PublicAppError };
 
+export const WALLPAPER_KINDS = ['static-image', 'live-bundle'] as const;
+export const wallpaperKindSchema = z.enum(WALLPAPER_KINDS);
+export type WallpaperKind = z.infer<typeof wallpaperKindSchema>;
+
 export const wallpaperRecordSchema = z
   .object({
     id: identifierSchema,
+    // Records written before Wallloop integration omit this field.  The
+    // default is intentionally static-image so old library entries remain
+    // readable and can be migrated without changing their meaning.
+    kind: wallpaperKindSchema.default('static-image'),
     filename: z.string().min(1).max(255),
+    bundlePath: z.string().min(1).max(4_096).optional(),
     prompt: z.string().min(1).max(4_000),
     title: z.string().min(3).max(100),
     themeId: themeIdSchema,
@@ -207,7 +216,23 @@ export const wallpaperRecordSchema = z
     applied: z.boolean(),
     favorite: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine((record, context) => {
+    if (record.kind === 'live-bundle' && !record.bundlePath) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bundlePath'],
+        message: 'Live bundle records require a bundle path.',
+      });
+    }
+    if (record.kind === 'static-image' && record.bundlePath !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bundlePath'],
+        message: 'Static image records cannot contain a bundle path.',
+      });
+    }
+  });
 
 export type WallpaperRecord = z.infer<typeof wallpaperRecordSchema>;
 

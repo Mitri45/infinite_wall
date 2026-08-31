@@ -22,6 +22,8 @@ export type WallpaperProcessRunner = (
 
 export interface WallpaperAdapter {
   apply(imagePath: string): Promise<void>;
+  /** Apply a Wallloop live bundle, with a native fallback if unavailable. */
+  applyLiveBundle?(bundlePath: string, fallbackImagePath: string): Promise<void>;
 }
 
 export interface WallpaperAdapterOptions {
@@ -29,6 +31,12 @@ export interface WallpaperAdapterOptions {
   readonly environment?: NodeJS.ProcessEnv;
   readonly runProcess?: WallpaperProcessRunner;
   readonly macOsHelperPath?: string;
+  /** Override the local wallloopctl executable for Linux/Cinnamon. */
+  readonly wallloopCommand?: string;
+  /** Override the Wallloop socket passed to wallloopctl. */
+  readonly wallloopSocket?: string;
+  /** Enable the optional Wallloop path; defaults on only for real processes. */
+  readonly enableWallloop?: boolean;
 }
 
 export interface WallpaperAdapterErrorDetails {
@@ -52,6 +60,20 @@ export class WallpaperAdapterError extends Error {
   }
 }
 
+export class WallloopUnavailableError extends WallpaperAdapterError {
+  constructor(message = 'Wallloop is unavailable.') {
+    super(message);
+    this.name = 'WallloopUnavailableError';
+  }
+}
+
+export class WallloopTransactionError extends WallpaperAdapterError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WallloopTransactionError';
+  }
+}
+
 export function createWallpaperAdapter(
   options: WallpaperAdapterOptions = {},
 ): WallpaperAdapter {
@@ -60,10 +82,37 @@ export function createWallpaperAdapter(
 
   switch (platform) {
     case 'linux':
-      return new LinuxWallpaperAdapter(
-        options.environment ?? process.env,
-        runProcess,
-      );
+      {
+        const native = new LinuxWallpaperAdapter(
+          options.environment ?? process.env,
+          runProcess,
+        );
+        const environment = options.environment ?? process.env;
+        const desktop = [
+          environment.XDG_CURRENT_DESKTOP,
+          environment.DESKTOP_SESSION,
+        ]
+          .filter(Boolean)
+          .join(':')
+          .toLowerCase();
+        // Tests inject a process runner to record native commands. Keep that
+        // fixture path deterministic; production uses the optional adapter by
+        // default and may still opt out with enableWallloop: false.
+        const enableWallloop =
+          options.enableWallloop ?? options.runProcess === undefined;
+        if (!enableWallloop || !desktop.includes('cinnamon')) {
+          return native;
+        }
+        return new WallloopWallpaperAdapter(
+          native,
+          new WallloopWallpaperClient({
+            command:
+              options.wallloopCommand ?? environment.WALLLOOPCTL ?? 'wallloopctl',
+            socket: options.wallloopSocket ?? environment.WALLLOOP_SOCKET,
+            runProcess,
+          }),
+        );
+      }
     case 'darwin':
       return new MacOsWallpaperAdapter(
         options.macOsHelperPath ?? 'InfiniteWallWallpaperHelper',
@@ -152,6 +201,212 @@ class LinuxWallpaperAdapter implements WallpaperAdapter {
       'Wallpaper application currently supports Cinnamon and GNOME on Linux.',
     );
   }
+}
+
+/**
+ * Linux/Cinnamon composition that keeps Wallloop's renderer independent from
+ * Electron.  Every operation is a bounded, short-lived wallloopctl process.
+ */
+export class WallloopWallpaperAdapter implements WallpaperAdapter {
+  readonly #native: WallpaperAdapter;
+  readonly #wallloop: WallloopWallpaperClient;
+
+  constructor(native: WallpaperAdapter, wallloop: WallloopWallpaperClient) {
+    this.#native = native;
+    this.#wallloop = wallloop;
+  }
+
+  async apply(imagePath: string): Promise<void> {
+    try {
+      await this.#wallloop.applyFile(imagePath);
+    } catch (error) {
+      if (error instanceof WallloopUnavailableError) {
+        await this.#native.apply(imagePath);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async applyLiveBundle(
+    bundlePath: string,
+    fallbackImagePath: string,
+  ): Promise<void> {
+    try {
+      await this.#wallloop.applyBundle(bundlePath);
+    } catch (error) {
+      if (error instanceof WallloopUnavailableError) {
+        await this.#native.apply(fallbackImagePath);
+        return;
+      }
+      throw error;
+    }
+  }
+}
+
+class WallloopWallpaperClient {
+  readonly #command: string;
+  readonly #socket: string | undefined;
+  readonly #runProcess: WallpaperProcessRunner;
+
+  constructor(options: {
+    readonly command: string;
+    readonly socket?: string;
+    readonly runProcess: WallpaperProcessRunner;
+  }) {
+    this.#command = options.command;
+    this.#socket = options.socket;
+    this.#runProcess = options.runProcess;
+  }
+
+  async suspendGeneration(): Promise<number> {
+    const result = await this.#invoke(
+      ['suspend', '--reason', 'generation', '--release-resources'],
+      'generation suspension',
+    );
+    const token = result.token;
+    if (
+      typeof token !== 'number' ||
+      !Number.isSafeInteger(token) ||
+      token <= 0 ||
+      result.reason !== 'generation' ||
+      result.releaseResources !== true
+    ) {
+      throw new WallloopTransactionError(
+        'Wallloop returned an invalid generation lease response.',
+      );
+    }
+    return token;
+  }
+
+  async releaseGeneration(token: number): Promise<void> {
+    if (!Number.isSafeInteger(token) || token <= 0) {
+      throw new WallloopTransactionError(
+        'Wallloop generation lease token is invalid.',
+      );
+    }
+    const result = await this.#invoke(
+      ['resume', '--token', String(token)],
+      'generation lease release',
+    );
+    if (result.released !== true) {
+      throw new WallloopTransactionError(
+        'Wallloop did not release the generation lease token.',
+      );
+    }
+  }
+
+  async applyFile(imagePath: string): Promise<void> {
+    assertAbsoluteImagePath(imagePath, path.posix);
+    const result = await this.#invoke(
+      ['apply-file', imagePath],
+      'static wallpaper apply',
+    );
+    assertWallloopRuntimeResponse(result, 'static wallpaper apply');
+  }
+
+  async applyBundle(bundlePath: string): Promise<void> {
+    assertAbsoluteImagePath(bundlePath, path.posix);
+    const imported = await this.#invoke(
+      ['import', bundlePath],
+      'live bundle import',
+    );
+    if (typeof imported.id !== 'string' || imported.id.length === 0) {
+      throw new WallloopTransactionError(
+        'Wallloop returned an invalid live bundle import response.',
+      );
+    }
+    const result = await this.#invoke(
+      ['apply', imported.id],
+      'live bundle apply',
+    );
+    assertWallloopRuntimeResponse(result, 'live bundle apply');
+  }
+
+  async #invoke(
+    arguments_: readonly string[],
+    operation: string,
+  ): Promise<Record<string, unknown>> {
+    const args = [
+      ...(this.#socket ? ['--socket', this.#socket] : []),
+      '--json',
+      ...arguments_,
+    ];
+    const result = await this.#runProcess({
+      command: this.#command,
+      args,
+      timeoutMs: APPLY_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+    });
+    if (
+      result.spawnError?.code === 'ENOENT' ||
+      (result.exitCode !== 0 &&
+        looksLikeWallloopUnavailable(`${result.stderr}\n${result.stdout}`))
+    ) {
+      throw new WallloopUnavailableError(
+        `Wallloop is unavailable during ${operation}.`,
+      );
+    }
+    if (
+      result.exitCode !== 0 ||
+      result.spawnError ||
+      result.timedOut ||
+      result.aborted ||
+      result.overflowed
+    ) {
+      throw new WallloopTransactionError(
+        `Wallloop ${operation} failed${lastOutputLine(result.stderr || result.stdout) ? `: ${lastOutputLine(result.stderr || result.stdout)}` : '.'}`,
+      );
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(result.stdout);
+    } catch {
+      throw new WallloopTransactionError(
+        `Wallloop returned malformed JSON for ${operation}.`,
+      );
+    }
+    if (!isObject(payload)) {
+      throw new WallloopTransactionError(
+        `Wallloop returned a non-object response for ${operation}.`,
+      );
+    }
+    return payload;
+  }
+}
+
+function assertWallloopRuntimeResponse(
+  value: Record<string, unknown>,
+  operation: string,
+): void {
+  if (!isObject(value.runtime)) {
+    throw new WallloopTransactionError(
+      `Wallloop returned an invalid response for ${operation}.`,
+    );
+  }
+}
+
+function looksLikeWallloopUnavailable(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return [
+    'connection refused',
+    'no such file or directory',
+    'cannot connect',
+    'failed to connect',
+    'could not connect',
+    'wallloop.sock',
+    'command not found',
+    'executable file not found',
+  ].some((marker) => normalized.includes(marker));
+}
+
+function lastOutputLine(output: string): string {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1)
+    ?.slice(0, 500) ?? '';
 }
 
 class MacOsWallpaperAdapter implements WallpaperAdapter {

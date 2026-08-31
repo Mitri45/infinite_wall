@@ -38,6 +38,7 @@ afterEach(cleanup);
 const preview: WallpaperPreview = {
   record: {
     id: 'test-wallpaper',
+    kind: 'static-image',
     filename: 'wallpaper.png',
     prompt: 'A quiet geometric landscape composed for a wide desktop wallpaper.',
     title: 'Quiet Geometry',

@@ -4,6 +4,7 @@ import type { CapturedProcessResult } from './codex-process';
 import {
   createWallpaperAdapter,
   WallpaperAdapterError,
+  WallloopTransactionError,
   type WallpaperProcessRunner,
 } from './wallpaper-adapter';
 
@@ -216,5 +217,144 @@ describe('wallpaper application adapters', () => {
         'The operating system could not apply this wallpaper.',
       ),
     );
+  });
+
+  it('dispatches Cinnamon static images through Wallloop with a short-lived command', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async (options) => {
+      expect(options.command).toBe('/tmp/wallloopctl');
+      expect(options.args).toEqual([
+        '--json',
+        'apply-file',
+        '/tmp/Wall Paper;$(unsafe).png',
+      ]);
+      return {
+        ...SUCCESS,
+        stdout: '{"runtime":{"state":"static","wallpaperId":"image"}}',
+      };
+    });
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: { XDG_CURRENT_DESKTOP: 'X-Cinnamon' },
+      enableWallloop: true,
+      wallloopCommand: '/tmp/wallloopctl',
+      runProcess,
+    });
+
+    await adapter.apply('/tmp/Wall Paper;$(unsafe).png');
+    expect(runProcess).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses native Cinnamon fallback only when Wallloop is unavailable', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async (options) => {
+      if (options.command === '/tmp/wallloopctl') {
+        return {
+          ...SUCCESS,
+          exitCode: 1,
+          stderr: 'wallloopctl: io-error: Connection refused',
+        };
+      }
+      return SUCCESS;
+    });
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: { XDG_CURRENT_DESKTOP: 'X-Cinnamon' },
+      enableWallloop: true,
+      wallloopCommand: '/tmp/wallloopctl',
+      runProcess,
+    });
+
+    await adapter.apply('/tmp/wallpaper.png');
+    expect(runProcess.mock.calls.map(([options]) => options.command)).toEqual([
+      '/tmp/wallloopctl',
+      'gsettings',
+    ]);
+  });
+
+  it('does not mask an available Wallloop rejection or malformed output', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => ({
+      ...SUCCESS,
+      exitCode: 1,
+      stderr: 'wallloopctl: integrity-failed: invalid bundle',
+    }));
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: { XDG_CURRENT_DESKTOP: 'X-Cinnamon' },
+      enableWallloop: true,
+      wallloopCommand: '/tmp/wallloopctl',
+      runProcess,
+    });
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toEqual(
+      new WallloopTransactionError(
+        'Wallloop static wallpaper apply failed: wallloopctl: integrity-failed: invalid bundle',
+      ),
+    );
+
+    runProcess.mockResolvedValue({ ...SUCCESS, stdout: 'not json' });
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toThrow(
+      'returned malformed JSON',
+    );
+    expect(runProcess).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a Wallloop timeout instead of using the native fallback', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => ({
+      ...SUCCESS,
+      exitCode: null,
+      timedOut: true,
+    }));
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: { XDG_CURRENT_DESKTOP: 'X-Cinnamon' },
+      enableWallloop: true,
+      wallloopCommand: '/tmp/wallloopctl',
+      runProcess,
+    });
+
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toEqual(
+      new WallloopTransactionError('Wallloop static wallpaper apply failed.'),
+    );
+    expect(runProcess).toHaveBeenCalledTimes(1);
+  });
+
+  it('imports then applies live bundles without putting Electron in the playback path', async () => {
+    const calls: string[][] = [];
+    const runProcess = vi.fn<WallpaperProcessRunner>(async (options) => {
+      calls.push([options.command, ...options.args]);
+      if (options.args.includes('import')) {
+        return { ...SUCCESS, stdout: '{"id":"rainy-city"}' };
+      }
+      return {
+        ...SUCCESS,
+        stdout: '{"runtime":{"state":"live-playing","wallpaperId":"rainy-city"}}',
+      };
+    });
+    const adapter = createWallpaperAdapter({
+      platform: 'linux',
+      environment: { XDG_CURRENT_DESKTOP: 'X-Cinnamon' },
+      enableWallloop: true,
+      wallloopCommand: '/tmp/wallloopctl',
+      wallloopSocket: '/tmp/wallloop.sock',
+      runProcess,
+    });
+
+    await adapter.applyLiveBundle?.('/tmp/live-bundle', '/tmp/fallback.png');
+    expect(calls).toEqual([
+      [
+        '/tmp/wallloopctl',
+        '--socket',
+        '/tmp/wallloop.sock',
+        '--json',
+        'import',
+        '/tmp/live-bundle',
+      ],
+      [
+        '/tmp/wallloopctl',
+        '--socket',
+        '/tmp/wallloop.sock',
+        '--json',
+        'apply',
+        'rainy-city',
+      ],
+    ]);
   });
 });

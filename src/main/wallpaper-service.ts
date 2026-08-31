@@ -40,11 +40,22 @@ export class WallpaperService {
 
   apply(recordId: string): Promise<WallpaperRecord> {
     return this.#runOperation(async () => {
-      const imagePath = await this.#library.resolveImage(recordId);
-      if (!imagePath) {
+      const asset = await this.#library.resolveAsset(recordId);
+      if (!asset) {
         throw new WallpaperLibraryError('The wallpaper could not be found.');
       }
-      await this.#adapter.apply(imagePath);
+      if (asset.record.kind === 'live-bundle' && asset.bundlePath) {
+        if (this.#adapter.applyLiveBundle) {
+          await this.#adapter.applyLiveBundle(asset.bundlePath, asset.imagePath);
+        } else {
+          // Non-Cinnamon platforms and explicitly native adapters retain the
+          // static fallback instead of trying to keep Electron alive for live
+          // playback.
+          await this.#adapter.apply(asset.imagePath);
+        }
+      } else {
+        await this.#adapter.apply(asset.imagePath);
+      }
       return this.#library.markApplied(recordId);
     });
   }

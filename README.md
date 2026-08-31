@@ -36,6 +36,14 @@ than only tools used to write its code.
 - Can generate and apply wallpapers automatically on a schedule.
 - Provides tray controls for quick generation, scheduling, and library actions.
 
+On Linux/Cinnamon, Infinite Wall can use the optional local Wallloop engine
+when `wallloopctl` is installed and its user service is reachable. Static
+images use Wallloop's short-lived `apply-file` command; live-bundle records use
+short-lived import/apply commands, so Electron is not part of playback. If
+Wallloop is unavailable, the existing Cinnamon `gsettings` adapter remains the
+fallback. A reachable Wallloop rejection or malformed response is reported as
+an apply failure instead of being silently claimed as success.
+
 ## How generation works
 
 Infinite Wall uses the **Codex CLI installed on your computer** and your existing
@@ -107,6 +115,14 @@ Run the verification suite with:
 ```bash
 pnpm verify
 ```
+
+The Wallloop integration is covered by the adapter, library migration, and
+static/live dispatch tests in the verification suite. The packaged Linux
+Wallloop apply path and the Wallpaper generation/resource handoff have also
+been exercised as live product checks. The owner has confirmed the Cinnamon
+wallpaper fit, usable desktop icons, working right-click desktop menu, and
+unaffected workspace switching; M5 is fully accepted, with that owner-attended
+judgment kept distinct from automated test claims.
 
 ## Build from source
 

@@ -54,6 +54,36 @@ describe('WallpaperLibrary', () => {
     ]);
   });
 
+  it('migrates an old static record when it is read', async () => {
+    const { library, root, generation } = await createLibrary();
+    const preview = await library.importGeneration(generation);
+    const recordPath = path.join(root, 'library', 'items', preview.record.id, 'record.json');
+    const legacy = JSON.parse(await readFile(recordPath, 'utf8')) as Record<string, unknown>;
+    delete legacy.kind;
+    await writeFile(recordPath, `${JSON.stringify(legacy)}\n`);
+
+    const [item] = await library.list();
+    expect(item.record.kind).toBe('static-image');
+    expect(JSON.parse(await readFile(recordPath, 'utf8'))).toMatchObject({
+      id: preview.record.id,
+      kind: 'static-image',
+    });
+  });
+
+  it('records a live bundle separately from its static fallback', async () => {
+    const { library, root, generation } = await createLibrary();
+    const bundlePath = path.join(root, 'live-bundle');
+    await mkdir(bundlePath);
+
+    const preview = await library.importLiveBundle(generation, bundlePath);
+    expect(preview.record).toMatchObject({
+      kind: 'live-bundle',
+      bundlePath,
+    });
+    expect(await library.resolveBundle(preview.record.id)).toBe(bundlePath);
+    expect(await library.resolveImage(preview.record.id)).not.toBeNull();
+  });
+
   it('removes staging data when the copied image cannot be decoded', async () => {
     const { root, generation } = await createLibrary();
     const library = new WallpaperLibrary({
