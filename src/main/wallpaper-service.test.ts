@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -97,6 +97,7 @@ describe('WallpaperService', () => {
     await writeFile(sourceImage, fakePngBytes);
     const bundlePath = path.join(root, 'live-bundle');
     await mkdir(bundlePath);
+    const canonicalBundlePath = await realpath(bundlePath);
     const library = new WallpaperLibrary({
       root: path.join(root, 'library'),
       inspectImage: async () => ({ width: 1920, height: 1080 }),
@@ -122,7 +123,7 @@ describe('WallpaperService', () => {
     const applied = await service.apply(live.record.id);
 
     expect(applyLiveBundle).toHaveBeenCalledWith(
-      bundlePath,
+      canonicalBundlePath,
       expect.stringContaining(path.join('items', live.record.id, 'wallpaper.png')),
     );
     expect(apply).not.toHaveBeenCalled();

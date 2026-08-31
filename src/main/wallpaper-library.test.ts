@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   readdir,
   rm,
   symlink,
@@ -74,13 +75,14 @@ describe('WallpaperLibrary', () => {
     const { library, root, generation } = await createLibrary();
     const bundlePath = path.join(root, 'live-bundle');
     await mkdir(bundlePath);
+    const canonicalBundlePath = await realpath(bundlePath);
 
     const preview = await library.importLiveBundle(generation, bundlePath);
     expect(preview.record).toMatchObject({
       kind: 'live-bundle',
-      bundlePath,
+      bundlePath: canonicalBundlePath,
     });
-    expect(await library.resolveBundle(preview.record.id)).toBe(bundlePath);
+    expect(await library.resolveBundle(preview.record.id)).toBe(canonicalBundlePath);
     expect(await library.resolveImage(preview.record.id)).not.toBeNull();
   });
 
