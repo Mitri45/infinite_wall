@@ -57,7 +57,8 @@ private local library.
 
 ## Requirements
 
-- Linux with Cinnamon or GNOME.
+- Linux with Cinnamon or GNOME, or macOS 12 or newer.
+- On macOS, Xcode Command Line Tools for the Swift wallpaper helper and app icon.
 - [Codex CLI](https://developers.openai.com/codex/cli/) installed and up to date.
 - A signed-in Codex session for the same desktop user running Infinite Wall.
 
@@ -110,6 +111,11 @@ pnpm install --frozen-lockfile
 pnpm start
 ```
 
+For a macOS source check that leaves the installed app's profile and Login Items
+untouched, start with `INFINITE_WALL_ISOLATED_TEST=1 pnpm start`. This creates a
+fresh temporary profile and prints its path. Launch at login cannot be enabled
+in this mode.
+
 Run the verification suite with:
 
 ```bash
@@ -133,12 +139,17 @@ packaged, runnable app with:
 pnpm package
 ```
 
-The unpacked build is written to out/Infinite Wall-linux-x64/; launch it
-directly with:
+The unpacked build is written under `out/` for the host platform and architecture.
+On Linux x64, launch it directly with:
 
 ```bash
 "./out/Infinite Wall-linux-x64/infinite-wall"
 ```
+
+On macOS arm64, the unpacked app is `out/Infinite Wall-darwin-arm64/Infinite Wall.app`.
+The macOS build includes a native wallpaper helper; it does not require System
+Events automation permission to apply a wallpaper. Distributable macOS builds
+must be signed and notarized as described below.
 
 To build the distributable installers (.deb and portable ZIP):
 

@@ -19,7 +19,8 @@ trustLockfile: false
 overrides:
   '@electron/rebuild@3>@electron/node-gyp': 10.2.0-electron.2
   # Forge currently resolves vulnerable legacy versions through its toolchain.
-  tar: 7.5.20
+  '@xmldom/xmldom': 0.9.12
+  tar: 7.5.21
   tmp: 0.2.7
 
 # Only these reviewed packages may execute dependency lifecycle scripts.
