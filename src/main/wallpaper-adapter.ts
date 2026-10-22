@@ -429,6 +429,21 @@ class MacOsWallpaperAdapter implements WallpaperAdapter {
       timeoutMs: APPLY_TIMEOUT_MS,
       maxOutputBytes: MAX_OUTPUT_BYTES,
     });
+    if (result.spawnError?.code === 'ENOENT') {
+      throw new WallpaperAdapterError(
+        'The macOS wallpaper helper is missing from this build.',
+      );
+    }
+    if (result.spawnError?.code === 'EACCES') {
+      throw new WallpaperAdapterError(
+        'macOS could not execute the bundled wallpaper helper.',
+      );
+    }
+    if (result.timedOut) {
+      throw new WallpaperAdapterError(
+        'The macOS wallpaper helper timed out.',
+      );
+    }
     if (
       result.exitCode !== 0 ||
       result.spawnError ||
