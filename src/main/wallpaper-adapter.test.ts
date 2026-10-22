@@ -156,6 +156,23 @@ describe('wallpaper application adapters', () => {
     });
   });
 
+  it('explains when the macOS helper is missing from a build', async () => {
+    const runProcess = vi.fn<WallpaperProcessRunner>(async () => ({
+      ...SUCCESS,
+      exitCode: null,
+      spawnError: Object.assign(new Error('spawn failed'), { code: 'ENOENT' }),
+    }));
+    const adapter = createWallpaperAdapter({
+      platform: 'darwin',
+      macOsHelperPath: '/tmp/InfiniteWallWallpaperHelper',
+      runProcess,
+    });
+
+    await expect(adapter.apply('/tmp/wallpaper.png')).rejects.toThrow(
+      'The macOS wallpaper helper is missing from this build.',
+    );
+  });
+
   it('rejects a successful macOS helper process with an invalid response', async () => {
     const runProcess = vi.fn<WallpaperProcessRunner>(async () => SUCCESS);
     const adapter = createWallpaperAdapter({

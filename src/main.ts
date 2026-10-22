@@ -10,6 +10,8 @@ import {
   shell,
   Tray,
 } from 'electron';
+import { mkdtempSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -41,6 +43,17 @@ const appCommandQueue = new RendererEventQueue<AppCommand>();
 const libraryRefreshQueue = new RendererEventQueue<true>();
 const settingsChangedQueue = new RendererEventQueue<AppSettings>();
 const scheduleStatusChangedQueue = new RendererEventQueue<ScheduleStatus>();
+const isolatedTestRequested = process.env.INFINITE_WALL_ISOLATED_TEST === '1';
+if (isolatedTestRequested && (process.platform !== 'darwin' || app.isPackaged)) {
+  throw new Error('Isolated testing requires an unpackaged macOS app.');
+}
+const isolatedMacTest = isolatedTestRequested;
+if (isolatedMacTest) {
+  const profile = mkdtempSync(path.join(os.tmpdir(), 'infinite-wall-test-'));
+  app.setPath('userData', profile);
+  app.setPath('sessionData', profile);
+  console.info(`Infinite Wall isolated test profile: ${profile}`);
+}
 const appAssetPath = (filename: string): string => path.join(
   app.isPackaged ? process.resourcesPath : app.getAppPath(),
   'assets',
@@ -251,13 +264,24 @@ const initializeApplication = async (): Promise<void> => {
     executablePath: process.execPath,
     developmentAppPath: app.isPackaged ? undefined : app.getAppPath(),
     setNativeLoginItem: (enabled) => {
+      if (isolatedMacTest) {
+        if (enabled) {
+          throw new Error('Launch at login is unavailable in an isolated test.');
+        }
+        return;
+      }
       app.setLoginItemSettings({ openAtLogin: enabled });
     },
   });
   runtime = registerIpcHandlers({
     jobRoot: path.join(app.getPath('userData'), 'generation-jobs'),
     libraryRoot: path.join(app.getPath('userData'), 'library'),
-    settingsRoot: path.join(app.getPath('userData'), 'preferences'),
+    // Chromium stores its own Preferences file in userData. On the default
+    // case-insensitive macOS/Windows volumes, "preferences" aliases that file.
+    settingsRoot: path.join(
+      app.getPath('userData'),
+      process.platform === 'linux' ? 'preferences' : 'app-settings',
+    ),
     macOsWallpaperHelperPath: macOsWallpaperHelperPath(),
     setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
     notify,
@@ -266,7 +290,11 @@ const initializeApplication = async (): Promise<void> => {
     onLibraryChanged: notifyLibraryChanged,
     onRendererReady: markRendererReady,
   });
-  mainWindow = createWindow(false);
+  // Finder launches should open the UI; login launches stay in the menu bar.
+  // Keep the existing tray-first behavior on Linux and Windows.
+  const showOnLaunch = process.platform === 'darwin' &&
+    !app.getLoginItemSettings().wasOpenedAtLogin;
+  mainWindow = createWindow(showOnLaunch);
   const trayImage = nativeImage
     .createFromPath(appAssetPath('tray-icon.png'))
     .resize({ width: 22, height: 22 });
