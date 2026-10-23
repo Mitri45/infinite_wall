@@ -284,6 +284,7 @@ const initializeApplication = async (): Promise<void> => {
     ),
     macOsWallpaperHelperPath: macOsWallpaperHelperPath(),
     setLaunchAtLogin: (enabled) => launchAtLogin.setEnabled(enabled),
+    syncLaunchAtLoginOnStartup: (enabled) => launchAtLogin.syncOnStartup(enabled),
     notify,
     onSettingsChanged: notifySettingsChanged,
     onScheduleStatusChanged: notifyScheduleStatusChanged,
