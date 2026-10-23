@@ -45,6 +45,7 @@ interface RegisterIpcHandlersOptions {
   readonly settingsRoot: string;
   readonly macOsWallpaperHelperPath?: string;
   readonly setLaunchAtLogin: (enabled: boolean) => Promise<void>;
+  readonly syncLaunchAtLoginOnStartup: (enabled: boolean) => Promise<void>;
   readonly notify: (title: string, body: string) => void;
   readonly onSettingsChanged?: (settings: AppSettings) => void;
   readonly onScheduleStatusChanged?: (status: ScheduleStatus) => void;
@@ -154,7 +155,7 @@ export function registerIpcHandlers(
   const settingsReady = settingsStore.load().then(async (settings) => {
     scheduler.configure(settings);
     options.onSettingsChanged?.(settings);
-    await options.setLaunchAtLogin(settings.launchAtLogin).catch(() => {
+    await options.syncLaunchAtLoginOnStartup(settings.launchAtLogin).catch(() => {
       options.notify(
         'Infinite Wall settings',
         'Launch at login could not be configured on this computer.',

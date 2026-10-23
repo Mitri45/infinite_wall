@@ -164,8 +164,11 @@ Windows x64, and both macOS x64 and arm64 artifacts.
 
 On macOS, packaging compiles the bundled AppKit wallpaper helper and generates
 the native `.icns` application icon before Electron Forge signs the bundle.
-Ordinary CI packaging remains unsigned so pull requests do not receive release
-credentials. Tagged releases require these GitHub Actions secrets:
+Ordinary local and CI packages use an ad hoc signature without Hardened Runtime
+so macOS can verify the finished bundle and load its Electron Framework. This
+does not establish a trusted publisher or replace Apple notarization. Pull
+requests do not receive release credentials. Tagged releases keep Hardened
+Runtime enabled and require these GitHub Actions secrets:
 
 - `MACOS_CERTIFICATE_P12_BASE64`
 - `MACOS_CERTIFICATE_PASSWORD`

@@ -20,6 +20,25 @@ const macOsSigningEnabled =
   process.platform === 'darwin' &&
   process.env.INFINITE_WALL_MACOS_SIGNING === 'true';
 
+// Packager accepts continueOnError although Forge's sign option type omits it.
+// Keep this value in a variable so TypeScript does not reject the extra key.
+const localMacOsSignConfig = {
+  identity: '-',
+  identityValidation: false,
+  preAutoEntitlements: false,
+  preEmbedProvisioningProfile: false,
+  // Ad hoc signatures have no Team ID. Hardened Runtime would reject the
+  // bundled Electron Framework during library validation on launch.
+  optionsForFile: () => ({ hardenedRuntime: false }),
+  continueOnError: false,
+};
+const releaseMacOsSignConfig = {
+  continueOnError: false,
+  ...(process.env.MACOS_SIGN_IDENTITY
+    ? { identity: process.env.MACOS_SIGN_IDENTITY }
+    : {}),
+};
+
 const macOsNotarizeConfig = () => {
   if (!macOsSigningEnabled) {
     return undefined;
@@ -54,13 +73,12 @@ const config: ForgeConfig = {
       ? ['assets', MACOS_HELPER_OUTPUT]
       : ['assets'],
     icon: applicationIcon(),
-    osxSign: macOsSigningEnabled
-      ? {
-          ...(process.env.MACOS_SIGN_IDENTITY
-            ? { identity: process.env.MACOS_SIGN_IDENTITY }
-            : {}),
-        }
-      : undefined,
+    // Packager rewrites Electron's signed bundle. Sign the finished local
+    // bundle so its Info.plist and nested code pass macOS verification.
+    // The local identity is ad hoc and is not a release identity.
+    osxSign: process.platform !== 'darwin' ? undefined : macOsSigningEnabled
+      ? releaseMacOsSignConfig
+      : localMacOsSignConfig,
     osxNotarize: macOsNotarizeConfig(),
   },
   rebuildConfig: {},
