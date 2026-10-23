@@ -71,6 +71,14 @@ export class LaunchAtLoginController {
       throw error;
     }
   }
+
+  async syncOnStartup(enabled: boolean): Promise<void> {
+    // macOS owns the current Login Item state. A normal launch must not erase
+    // it just because a settings file is missing or has an old default.
+    if (this.#platform !== 'darwin') {
+      await this.setEnabled(enabled);
+    }
+  }
 }
 
 function quoteDesktopExecArgument(argument: string): string {

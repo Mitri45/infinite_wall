@@ -54,4 +54,49 @@ describe('LaunchAtLoginController', () => {
 
     expect(setNativeLoginItem).toHaveBeenCalledWith(true);
   });
+
+  it('does not change the macOS login item during startup, but honors an explicit toggle', async () => {
+    const setNativeLoginItem = vi.fn();
+    const controller = new LaunchAtLoginController({
+      platform: 'darwin',
+      configRoot: '/unused',
+      executablePath: '/Applications/Infinite Wall.app',
+      setNativeLoginItem,
+    });
+
+    await controller.syncOnStartup(false);
+    await controller.syncOnStartup(true);
+    expect(setNativeLoginItem).not.toHaveBeenCalled();
+
+    await controller.setEnabled(true);
+    expect(setNativeLoginItem).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it('preserves Windows startup synchronization', async () => {
+    const setNativeLoginItem = vi.fn();
+    const controller = new LaunchAtLoginController({
+      platform: 'win32',
+      configRoot: '/unused',
+      executablePath: 'C:\\Infinite Wall\\infinite-wall.exe',
+      setNativeLoginItem,
+    });
+
+    await controller.syncOnStartup(false);
+    expect(setNativeLoginItem).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('preserves Linux startup synchronization', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'infinite-wall-login-'));
+    roots.push(root);
+    const controller = new LaunchAtLoginController({
+      platform: 'linux',
+      configRoot: root,
+      executablePath: '/opt/infinite-wall/infinite-wall',
+      setNativeLoginItem: vi.fn(),
+    });
+
+    await controller.syncOnStartup(true);
+    expect(await readFile(path.join(root, 'autostart', 'infinite-wall.desktop'), 'utf8'))
+      .toContain('Exec="/opt/infinite-wall/infinite-wall"');
+  });
 });
